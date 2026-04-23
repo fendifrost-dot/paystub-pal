@@ -105,10 +105,12 @@
   // Event wiring
   // ===========================================================================
   function bindEvents() {
+    // Prevent accidental form submission (e.g. pressing Enter in an input).
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       generateStub();
     });
+    form.setAttribute("onsubmit", "return false;");
 
     // Company
     document.getElementById("saveCompanyBtn").addEventListener("click", saveCompany);
@@ -133,10 +135,7 @@
 
     // Primary actions
     document.getElementById("saveStubBtn").addEventListener("click", saveStubToHistory);
-    document.getElementById("printStubBtn").addEventListener("click", function () {
-      generateStub();
-      window.print();
-    });
+    document.getElementById("generatePdfBtn").addEventListener("click", generatePDF);
 
     // Data backup
     document.getElementById("exportBtn").addEventListener("click", exportJSON);
@@ -230,7 +229,8 @@
         address1: valueOf("companyAddress1"),
         address2: valueOf("companyAddress2"),
         ein:      valueOf("companyEin"),
-        state:    valueOf("state")
+        state:    valueOf("state"),
+        website:  valueOf("companyWebsite")
       };
       var idx = companies.findIndex(function (c) { return c.id === company.id; });
       if (idx >= 0) companies[idx] = company; else companies.push(company);
@@ -295,10 +295,11 @@
     document.getElementById("companyAddress2").value = c.address2 || "";
     document.getElementById("companyEin").value      = c.ein || "";
     document.getElementById("state").value           = c.state || "IL";
+    document.getElementById("companyWebsite").value  = c.website || "";
   }
 
   function clearCompanyFields() {
-    ["companyName", "companyAddress1", "companyAddress2", "companyEin"].forEach(function (id) {
+    ["companyName", "companyAddress1", "companyAddress2", "companyEin", "companyWebsite"].forEach(function (id) {
       document.getElementById(id).value = "";
     });
     document.getElementById("state").value = "IL";
@@ -675,9 +676,12 @@
     setText("stubYtdNet",              formatMoney(d.ytdNet));
     setText("stubYtdTotalHours",       formatHours(d.ytdHours));
 
-    var co = valueOf("companyName") || "";
+    // Footer strip: Company • Address line 2 • website (all optional)
+    var co       = valueOf("companyName") || "";
     var cityLine = valueOf("companyAddress2") || "";
-    setText("stubFooter", co && cityLine ? (co + " \u2022 " + cityLine) : "\u00A0");
+    var web      = (valueOf("companyWebsite") || "").replace(/^https?:\/\//i, "");
+    var footerParts = [co, cityLine, web].filter(function (p) { return p; });
+    setText("stubFooter", footerParts.length ? footerParts.join(" \u2022 ") : "\u00A0");
   }
 
   // ===========================================================================
@@ -901,6 +905,76 @@
     saveData(STORAGE_KEYS.stubs, stubs);
     renderStubHistory();
     generateStub();
+  }
+
+  // ===========================================================================
+  // Generate PDF (clean, no browser URL/timestamp)
+  // ===========================================================================
+  //
+  // Uses html2pdf.js (loaded from CDN in index.html). Renders the on-screen
+  // stub-paper element directly to PDF at US-Letter dimensions, then triggers
+  // a download named by employee + pay date. Unlike window.print(), this
+  // bypasses Chrome's auto-added page header/footer entirely.
+  function generatePDF() {
+    try {
+      if (typeof html2pdf === "undefined") {
+        flashButton("generatePdfBtn", "PDF library not ready", true);
+        return;
+      }
+      if (!activeCompanyId) {
+        flashButton("generatePdfBtn", "Pick a company", true);
+        return;
+      }
+      if (!employeeSelect.value) {
+        flashButton("generatePdfBtn", "Pick an employee", true);
+        return;
+      }
+
+      // Ensure preview is up to date with current form state.
+      generateStub();
+
+      var stubEl = document.querySelector(".stub-paper");
+      if (!stubEl) {
+        flashButton("generatePdfBtn", "Stub not found", true);
+        return;
+      }
+
+      // Strip screen-only styling (shadow, border, rounded corners) during render
+      // so the output looks like a clean document page.
+      stubEl.classList.add("pdf-rendering");
+
+      var emp = getActiveEmployee();
+      var safeName = (emp && emp.name ? emp.name : "employee")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      var payDate = valueOf("payDate") || toInputDate(new Date());
+      var filename = "paystub-" + safeName + "-" + payDate + ".pdf";
+
+      var opt = {
+        margin:      [0.25, 0.25, 0.25, 0.25],
+        filename:    filename,
+        image:       { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+        jsPDF:       { unit: "in", format: "letter", orientation: "portrait" }
+      };
+
+      flashButton("generatePdfBtn", "Rendering\u2026", false);
+
+      html2pdf().set(opt).from(stubEl).save()
+        .then(function () {
+          stubEl.classList.remove("pdf-rendering");
+          flashButton("generatePdfBtn", "PDF saved \u2713", false);
+        })
+        .catch(function (err) {
+          stubEl.classList.remove("pdf-rendering");
+          console.error("PDF generation failed:", err);
+          flashButton("generatePdfBtn", "PDF failed", true);
+        });
+    } catch (err) {
+      console.error("generatePDF error:", err);
+      flashButton("generatePdfBtn", "PDF failed", true);
+    }
   }
 
   // ===========================================================================

@@ -441,6 +441,14 @@ details.seed-ytd .grid {
   font-variant-numeric: tabular-nums;
 }
 
+/* Applied transiently by generatePDF() so html2canvas captures a clean page —
+   no drop shadow, no soft border, no rounded corners. */
+.stub-paper.pdf-rendering {
+  box-shadow: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
 .stub-paper p { margin: 0; padding: 0; }
 
 /* ---- Watermarks (diagonal NON-NEGOTIABLE) -------------------------------- */

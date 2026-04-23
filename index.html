@@ -7,6 +7,7 @@
   <title>PayStub Pal — Earnings Statement Generator</title>
   <meta name="description" content="Generate and print professional earnings statements." />
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 </head>
 <body>
   <main class="app-shell">
@@ -55,6 +56,9 @@
                 </select>
               </label>
             </div>
+            <label>Website (shown in stub footer)
+              <input id="companyWebsite" type="text" autocomplete="url" placeholder="e.g. murrcapital.com" />
+            </label>
           </div>
           <div class="actions">
             <button type="button" class="ghost" id="newCompanyBtn">+ New</button>
@@ -256,9 +260,8 @@
 
         <!-- Primary actions -->
         <div class="actions actions--primary">
-          <button type="submit" class="primary">Generate stub</button>
-          <button type="button" class="primary" id="saveStubBtn">Save stub to history</button>
-          <button type="button" class="ghost" id="printStubBtn">Print stub</button>
+          <button type="button" class="primary" id="generatePdfBtn">Generate PDF</button>
+          <button type="button" class="ghost" id="saveStubBtn">Save stub to history</button>
         </div>
 
         <!-- Stub history -->
