@@ -8,35 +8,42 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 42 35% 97%;
+    --foreground: 215 34% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 215 34% 15%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 205 65% 24%;
+    --primary-foreground: 40 35% 98%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 198 28% 91%;
+    --secondary-foreground: 205 65% 20%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 42 24% 91%;
+    --muted-foreground: 215 16% 42%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 167 57% 34%;
+    --accent-foreground: 40 35% 98%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 205 18% 82%;
+    --input: 205 18% 82%;
+    --ring: 167 57% 34%;
 
     --radius: 0.5rem;
+    --stub: 45 52% 96%;
+    --stub-foreground: 214 31% 13%;
+    --stub-muted: 214 15% 38%;
+    --stub-line: 214 19% 31%;
+    --stub-accent: 48 70% 88%;
+    --hero-pattern: radial-gradient(circle at 20% 15%, hsl(167 57% 34% / 0.16), transparent 28%), linear-gradient(135deg, hsl(42 35% 97%), hsl(198 34% 91%));
+    --shadow-glass: 0 18px 45px -24px hsl(205 65% 24% / 0.42);
 
     --sidebar-background: 0 0% 98%;
 
@@ -101,5 +108,41 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .bg-hero-pattern {
+    background: var(--hero-pattern);
+  }
+
+  .shadow-glass {
+    box-shadow: var(--shadow-glass);
+  }
+}
+
+@media print {
+  @page {
+    size: letter;
+    margin: 0.35in;
+  }
+
+  body {
+    background: hsl(var(--stub));
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #paystub-print,
+  #paystub-print * {
+    visibility: visible;
+  }
+
+  #paystub-print {
+    position: absolute;
+    inset: 0;
+    width: 100%;
   }
 }
