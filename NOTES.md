@@ -1,118 +1,59 @@
 # PayStub Pal — Open Issues & Feedback
 
-Last updated: 2026-04-23 · running notes for the next Cowork session.
+Last updated: 2026-04-23
 
-## Context
-- Repo: https://github.com/fendifrost-dot/paystub-pal (`main` branch)
-- Vanilla HTML/CSS/JS stub generator (not the Vite/React scaffold still living in `src/`)
-- Tool will be used to generate stubs across **all of Fendi's companies** — multi-company is a first-class requirement, not a nice-to-have.
+## Shipped in this session
 
----
+- [x] Kill the hardcoded "Sample Company LLC" seed. Empty-state prompt when no companies.
+- [x] Add Export / Import JSON so data survives Lovable reloads.
+- [x] Scope employees under the active company (employees list filters to the selected company).
+- [x] Migration: any legacy employee without `companyId` gets assigned to the first saved company.
+- [x] Delete buttons for company and employee (with confirm + cascade cleanup).
+- [x] Stub history stored per (company, employee, tax year).
+- [x] **Save stub to history** button on the primary action row. Idempotent per pay date.
+- [x] Stub history list with Load + Delete buttons per row.
+- [x] YTD columns now auto-compute from: starting-YTD seed (one-time) + sum of saved stubs for this employee in this tax year + current period.
+- [x] Collapse the 10 manual YTD inputs to one "Starting YTD seed" `<details>` accordion on the employee record (only needed when onboarding mid-year).
+- [x] Context indicator at the top of the controls panel: `Company › Employee` breadcrumb.
+- [x] `Save ✓` / `Save failed` flash feedback on every primary action button.
+- [x] State locked to IL only (bake in 4.95%).
+- [x] Save-button safety: replace `crypto.randomUUID()` with `genId()` fallback.
+- [x] BACKEND.md — decision framework, recommended stack (Supabase), minimum-viable schema with RLS, migration strategy.
 
-## 1. YTD should auto-compute from total hours, not manual entry
+## Still open
 
-**Reported:** "the calculations aren't right for ytd — it should automatically populate when you put the total hours in"
+### Short-term (next session candidates)
 
-**Current behavior:** The YTD section has ~10 manual-entry fields (YTD regular hours, YTD regular pay, YTD OT hours, YTD OT pay, YTD federal w/h, YTD state w/h, YTD SS, YTD Medicare, YTD pre-tax, YTD post-tax). Blank fields fall back to the *current period's* values — so the first stub looks right, but nothing is actually accumulating period-over-period.
+- [ ] **Hourly rate as employee default.** Currently lives on the stub-level form. Should be saved on the employee record and pre-fill when switching employees; still overridable per stub.
+- [ ] **Batch generate** — select a company + pay date → generate a stub for every employee at that company in one click (print all at once).
+- [ ] **Check Number** field (auto-increments per company; editable).
+- [ ] **Home Department** field on Employee and on the stub.
+- [ ] **Social Security wage-base cap** ($168,600 for 2024; update for 2026). Cap YTD SS at that amount.
+- [ ] **Additional Medicare** 0.9% surtax on wages over $200K single / $250K married.
+- [ ] **Confirm-on-unsaved-changes** dialog when switching companies or employees without saving.
 
-**What's needed:**
-- YTD must be a **running total** per (company, employee, tax year), not per stub.
-- Every generated stub should persist: `{ companyId, employeeId, payDate, grossPay, socSec, medicare, federal, state, pretax, posttax, netPay, regularHours, overtimeHours }`.
-- When generating a new stub, YTD for every field = sum of all prior stubs for that employee in the same tax year (year of `payDate`) + this stub.
-- Enter total hours → regular pay + OT pay + all withholdings auto-compute from current period → YTD auto-rolls up from history.
-- Only manual YTD field we should keep: a one-time **"starting YTD" seed** per employee, for migrating mid-year from another payroll system.
+### Medium-term
 
-**Implementation sketch:**
-- New localStorage key `paystub.stubs` → array of generated stub records
-- On generate: look up all stubs for this employee+year, sum fields, display as YTD
-- On print: append current stub to history (idempotent if same payDate)
-- Add a "Stub history" drawer per employee so Fendi can see/edit/delete prior stubs
+- [ ] Move to Supabase per BACKEND.md so data actually syncs across devices and survives Lovable iframe wipes for real.
+- [ ] Per-company defaults (pay frequency, OT multiplier, federal rate).
+- [ ] Stub history filter by date range (for multi-year employees).
+- [ ] W-2-style annual summary export per employee.
 
----
+### Long-term
 
-## 2. Redundant fields in the YTD section
+- [ ] Multi-user roles (owner, admin, read-only) — needed if Fendi's accountant should see the data.
+- [ ] PDF export (instead of browser print dialog) for reliable email attachments.
+- [ ] Audit log — who changed what, when.
 
-**Reported:** "some fields seem redundant in the ytd section"
+## Known fragilities
 
-**Audit of current YTD fields vs. what's actually needed:**
+- **localStorage inside Lovable's preview iframe is not reliable** across reloads. Export/Import is the mitigation until a backend lands.
+- **State tax is hardcoded for IL.** Adding TX, CA, NY etc. is one line in `STATE_CONFIG` + one `<option>` each — when Fendi's companies need them.
+- **Federal tax uses a flat user-set rate** (default 12%), not IRS tax tables. Fine for stub generation; don't confuse with actual tax-advice software.
 
-| Current field | Keep? | Why |
-|---|---|---|
-| YTD regular hours | Auto | Sum from history |
-| YTD regular pay | Auto | Sum from history |
-| YTD OT hours | Auto | Sum from history |
-| YTD OT pay | Auto | Sum from history |
-| YTD federal w/h | Auto | Sum from history |
-| YTD state w/h | Auto | Sum from history |
-| YTD Social Security | Auto | Sum from history |
-| YTD Medicare | Auto | Sum from history |
-| YTD pre-tax | Auto | Sum from history |
-| YTD post-tax | Auto | Sum from history |
+## Nice architectural things already in place
 
-**Proposed replacement:** collapse all 10 manual YTD fields into one optional "Starting-YTD seed" dialog per employee (grossPay + each withholding + net, total hours). Used once when onboarding an employee mid-year, then hidden.
-
----
-
-## 3. Saved employees disappear between sessions
-
-**Reported:** "when you save an employee you see save but there is no where to find them if you exit out and come back in"
-
-**Most likely root causes (in order):**
-
-1. **Lovable preview iframe blocks `localStorage`.** Browsers increasingly block storage in sandboxed/third-party iframes. The "Saved ✓" flash means the in-memory array was updated and `localStorage.setItem` was called without throwing — but the write is scoped to the iframe and wiped when the preview reloads.
-2. **Different origin on each visit.** If Lovable rotates preview URLs, localStorage doesn't follow.
-3. **Private/incognito mode** wipes storage on close.
-
-**Fix path — pick one:**
-
-- **Short-term (no backend):** add JSON **Export / Import** buttons. User clicks Export → downloads a `.json` snapshot of companies + employees + stub history. Import reloads it. Ugly but reliable across Lovable previews.
-- **Medium-term:** migrate from localStorage to **IndexedDB** — slightly better iframe behavior, supports larger data.
-- **Right answer:** a real backend. Supabase/Firebase/Cloudflare D1 + auth so Fendi can log in on any device and see their companies + employees + generated stubs. This is the only way a multi-company payroll tool makes sense long-term.
-
----
-
-## 4. Company data partial persistence — form stays, dropdown empties
-
-**Reported:** "that's the same for the company except the company stays put in the field"
-
-**Why this happens:** on page load, `seedDefaultOptions()` inserts a default "Sample Company LLC" if `companies` is empty. Then `hydrateSelects()` applies `companies[0]` to the form. So after a storage wipe, the fields *look* populated (with the seed), but the dropdown has only the seed — no user-saved companies.
-
-**Fix paths (same as #3, plus):**
-- Kill the seed entirely — don't auto-populate fake data. If there are no saved companies, leave the form blank and show an empty-state hint.
-
----
-
-## 5. Multi-company architecture (foundational)
-
-**Reported:** "this tool will be used for all of my companies"
-
-**What this implies:**
-- Company picker must be prominent, with easy "Add new company" flow.
-- Each company should have its own saved employees (scoped — right now it's a flat global list).
-- Each employee's YTD is per-company, per-tax-year.
-- Stub history filterable by company + year + employee.
-- Print batch: select a company → select a pay date → generate stubs for every employee at that company in one click.
-- Possible future: per-company pay-frequency default, per-company check # sequence, per-company EIN + address baked in.
-
-**Data model (proposed):**
-```
-Company { id, name, address1, address2, ein, state, createdAt }
-Employee { id, companyId, name, address1, address2, ssnLast4, filingStatus, allowances, exemptions, hourlyRate (default) }
-Stub { id, companyId, employeeId, payDate, periodStart, periodEnd, grossPay, netPay, socSec, medicare, federal, state, pretax, posttax, regularHours, overtimeHours, checkNumber }
-```
-
----
-
-## Priority for next session
-
-1. Kill the localStorage-only model → add Export/Import JSON so data survives Lovable reloads (quick win).
-2. Scope employees under companies (data model change).
-3. Replace manual YTD section with stub-history rollup.
-4. Kill the seeded "Sample Company LLC" default.
-5. Plan the backend migration for real multi-device usage.
-
-## Nice-to-haves mentioned earlier
-- Check # and Home Department fields on the stub
-- Social Security wage-base cap ($168,600 / year 2024; update for 2026)
-- Additional Medicare 0.9% on wages over $200K single / $250K married
-- Batch-print all employees for a given pay date
+- Every stub event flows through a single `generateStub()` function that re-renders the preview. No duplicated calc paths.
+- Calculations are pure: gross → taxable → each withholding → net, with exempt flags zeroing out cleanly.
+- Stub history is content-addressable by `(companyId, employeeId, payDate)`, so re-saving the same period idempotently updates.
+- YTD computation pulls from the single source of truth (the stubs array) — impossible to drift.

@@ -1,15 +1,17 @@
 (function () {
   "use strict";
 
-  // ---------------------------------------------------------------------------
-  // Storage, constants, config
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // Constants
+  // ===========================================================================
   var STORAGE_KEYS = {
-    companies: "paystub.companies",
-    employees: "paystub.employees"
+    companies:       "paystub.companies",
+    employees:       "paystub.employees",
+    stubs:           "paystub.stubs",
+    activeCompanyId: "paystub.activeCompanyId"
   };
 
-  // State tax rates are baked in. Only Illinois for now — add more here as we expand.
+  // State tax rates are baked in. Only Illinois for now — add more here to expand.
   var STATE_CONFIG = {
     IL: { label: "Illinois", code: "IL", defaultStateTaxRate: 4.95 }
   };
@@ -17,13 +19,12 @@
   var SOCIAL_SECURITY_RATE = 6.2;
   var MEDICARE_RATE        = 1.45;
 
-  // Period length in days for each frequency (used as end - (days-1) = start).
   var FREQUENCY_DAYS = {
-    weekly:       7,
-    biweekly:     14,
-    semimonthly:  15,
-    monthly:      30,
-    yearly:       365
+    weekly:      7,
+    biweekly:    14,
+    semimonthly: 15,
+    monthly:     30,
+    yearly:      365
   };
 
   var FREQUENCY_LABEL = {
@@ -34,81 +35,116 @@
     yearly:      "Yearly"
   };
 
-  var FILING_ABBREV = {
-    single:  "S",
-    married: "M",
-    head:    "H"
-  };
+  var FILING_ABBREV = { single: "S", married: "M", head: "H" };
+  var FILING_LABEL  = { single: "Single", married: "Married", head: "Head of household" };
 
-  // ---------------------------------------------------------------------------
-  // Wiring
-  // ---------------------------------------------------------------------------
+  var SEED_YTD_FIELDS = [
+    "seedYtdHours", "seedYtdGross",
+    "seedYtdFederal", "seedYtdState",
+    "seedYtdSocialSecurity", "seedYtdMedicare",
+    "seedYtdPretax", "seedYtdPosttax"
+  ];
+
+  // ===========================================================================
+  // State (in memory)
+  // ===========================================================================
+  var companies       = loadData(STORAGE_KEYS.companies);
+  var employees       = loadData(STORAGE_KEYS.employees);
+  var stubs           = loadData(STORAGE_KEYS.stubs);
+  var activeCompanyId = loadString(STORAGE_KEYS.activeCompanyId);
+
+  // Cached element references
   var form           = document.getElementById("paystub-form");
   var companySelect  = document.getElementById("companySelect");
   var employeeSelect = document.getElementById("employeeSelect");
 
-  var companies = loadData(STORAGE_KEYS.companies);
-  var employees = loadData(STORAGE_KEYS.employees);
-
-  seedDefaultOptions();
+  // ===========================================================================
+  // Init
+  // ===========================================================================
+  migrateLegacyData();
   bindEvents();
   setDefaultDates();
-  hydrateSelects();
+  hydrateCompanySelect();
+  hydrateEmployeeSelect();
+  updateContext();
   generateStub();
 
+  // ===========================================================================
+  // Migrations
+  // ===========================================================================
+  //
+  // Old shape: employees were a flat list with no companyId.
+  // New shape: every employee belongs to a company. Assign orphans to the first
+  // saved company so no data is lost.
+  function migrateLegacyData() {
+    if (!employees.length) return;
+    var firstCompanyId = companies.length ? companies[0].id : null;
+
+    var touched = false;
+    employees.forEach(function (e) {
+      if (!e.companyId) {
+        e.companyId = firstCompanyId;
+        touched = true;
+      }
+    });
+    if (touched) saveData(STORAGE_KEYS.employees, employees);
+  }
+
+  // ===========================================================================
+  // Event wiring
+  // ===========================================================================
   function bindEvents() {
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       generateStub();
     });
 
+    // Company
     document.getElementById("saveCompanyBtn").addEventListener("click", saveCompany);
-    document.getElementById("newCompanyBtn").addEventListener("click", clearCompanyForm);
+    document.getElementById("newCompanyBtn").addEventListener("click", newCompanyForm);
+    document.getElementById("deleteCompanyBtn").addEventListener("click", deleteActiveCompany);
+    companySelect.addEventListener("change", onCompanyChange);
+
+    // Employee
     document.getElementById("saveEmployeeBtn").addEventListener("click", saveEmployee);
-    document.getElementById("newEmployeeBtn").addEventListener("click", clearEmployeeForm);
+    document.getElementById("newEmployeeBtn").addEventListener("click", newEmployeeForm);
+    document.getElementById("deleteEmployeeBtn").addEventListener("click", deleteActiveEmployee);
+    employeeSelect.addEventListener("change", onEmployeeChange);
+
+    // Pay period / state
+    document.getElementById("payDate").addEventListener("change", function () {
+      autoCalcPeriod(); generateStub();
+    });
+    document.getElementById("payFrequency").addEventListener("change", function () {
+      autoCalcPeriod(); generateStub();
+    });
+    document.getElementById("state").addEventListener("change", generateStub);
+
+    // Primary actions
+    document.getElementById("saveStubBtn").addEventListener("click", saveStubToHistory);
     document.getElementById("printStubBtn").addEventListener("click", function () {
       generateStub();
       window.print();
     });
 
-    companySelect.addEventListener("change", function () {
-      var c = companies.find(function (x) { return x.id === companySelect.value; });
-      if (c) applyCompany(c);
-      generateStub();
+    // Data backup
+    document.getElementById("exportBtn").addEventListener("click", exportJSON);
+    document.getElementById("importBtn").addEventListener("click", function () {
+      document.getElementById("importFileInput").click();
     });
+    document.getElementById("importFileInput").addEventListener("change", importJSON);
 
-    employeeSelect.addEventListener("change", function () {
-      var emp = employees.find(function (x) { return x.id === employeeSelect.value; });
-      if (emp) applyEmployee(emp);
-      generateStub();
-    });
-
-    // Any field change re-renders. Pay date/frequency also re-lock the period.
-    ["payDate", "payFrequency"].forEach(function (id) {
-      document.getElementById(id).addEventListener("change", function () {
-        autoCalcPeriod();
-        generateStub();
-      });
-    });
-
-    document.getElementById("state").addEventListener("change", generateStub);
-
-    // Live-update on any numeric/text input that drives the stub.
+    // Live-update on any input (except readonly period fields)
     form.addEventListener("input", function (e) {
       if (!e.target || !e.target.id) return;
-      // Don't loop on the readonly period fields.
       if (e.target.id === "periodStart" || e.target.id === "periodEnd") return;
       generateStub();
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Pay period auto-calc (HARD LOCK)
-  // ---------------------------------------------------------------------------
-  // periodEnd = payDate - 2 days (2-day payroll lag, industry standard)
-  // periodStart = periodEnd - (FREQUENCY_DAYS[freq] - 1)
-  //
-  // The period inputs are readonly in the DOM; this is the single source.
+  // ===========================================================================
+  // Period auto-calc
+  // ===========================================================================
   function autoCalcPeriod() {
     var raw  = valueOf("payDate");
     var freq = valueOf("payFrequency") || "biweekly";
@@ -134,44 +170,41 @@
     autoCalcPeriod();
   }
 
-  // ---------------------------------------------------------------------------
-  // Saved records
-  // ---------------------------------------------------------------------------
-  function seedDefaultOptions() {
-    if (!companies.length) {
-      companies.push({
-        id: genId(),
-        name: "Sample Company LLC",
-        address1: "123 Main St",
-        address2: "Chicago, IL 60601",
-        ein: "00-0000000",
-        state: "IL"
-      });
-      saveData(STORAGE_KEYS.companies, companies);
-    }
-  }
-
-  function hydrateSelects() {
-    renderSelect(companySelect,  companies, "Select company");
-    renderSelect(employeeSelect, employees, "Select employee");
-    if (companies.length) {
-      companySelect.value = companies[0].id;
+  // ===========================================================================
+  // Company CRUD
+  // ===========================================================================
+  function hydrateCompanySelect() {
+    renderSelect(companySelect, companies, "Select company");
+    if (activeCompanyId && companies.find(function (c) { return c.id === activeCompanyId; })) {
+      companySelect.value = activeCompanyId;
+      applyCompany(getActiveCompany());
+    } else if (companies.length) {
+      activeCompanyId = companies[0].id;
+      saveString(STORAGE_KEYS.activeCompanyId, activeCompanyId);
+      companySelect.value = activeCompanyId;
       applyCompany(companies[0]);
     }
+    refreshCompanyButtons();
+    refreshEmptyState();
   }
 
-  function renderSelect(selectEl, list, placeholder) {
-    selectEl.innerHTML = "";
-    var base = document.createElement("option");
-    base.value = "";
-    base.textContent = placeholder;
-    selectEl.appendChild(base);
-    list.forEach(function (r) {
-      var opt = document.createElement("option");
-      opt.value = r.id;
-      opt.textContent = r.name;
-      selectEl.appendChild(opt);
-    });
+  function refreshCompanyButtons() {
+    document.getElementById("deleteCompanyBtn").hidden = !getActiveCompany();
+  }
+
+  function refreshEmptyState() {
+    document.getElementById("emptyState").hidden = companies.length > 0;
+  }
+
+  function onCompanyChange() {
+    activeCompanyId = companySelect.value || null;
+    saveString(STORAGE_KEYS.activeCompanyId, activeCompanyId || "");
+    var c = getActiveCompany();
+    if (c) applyCompany(c); else clearCompanyFields();
+    hydrateEmployeeSelect();  // employee list depends on active company
+    updateContext();
+    refreshCompanyButtons();
+    generateStub();
   }
 
   function saveCompany() {
@@ -181,7 +214,7 @@
         return;
       }
       var company = {
-        id: companySelect.value || genId(),
+        id:       companySelect.value || genId(),
         name:     valueOf("companyName"),
         address1: valueOf("companyAddress1"),
         address2: valueOf("companyAddress2"),
@@ -191,8 +224,14 @@
       var idx = companies.findIndex(function (c) { return c.id === company.id; });
       if (idx >= 0) companies[idx] = company; else companies.push(company);
       saveData(STORAGE_KEYS.companies, companies);
-      hydrateSelects();
-      companySelect.value = company.id;
+
+      activeCompanyId = company.id;
+      saveString(STORAGE_KEYS.activeCompanyId, activeCompanyId);
+
+      hydrateCompanySelect();
+      companySelect.value = activeCompanyId;
+      hydrateEmployeeSelect();
+      updateContext();
       generateStub();
       flashButton("saveCompanyBtn", "Saved \u2713", false);
     } catch (err) {
@@ -201,12 +240,41 @@
     }
   }
 
-  function clearCompanyForm() {
+  function newCompanyForm() {
     companySelect.value = "";
-    ["companyName", "companyAddress1", "companyAddress2", "companyEin"].forEach(function (id) {
-      document.getElementById(id).value = "";
-    });
-    document.getElementById("state").value = "IL";
+    activeCompanyId = null;
+    saveString(STORAGE_KEYS.activeCompanyId, "");
+    clearCompanyFields();
+    hydrateEmployeeSelect();
+    refreshCompanyButtons();
+    updateContext();
+    generateStub();
+    document.getElementById("companyName").focus();
+  }
+
+  function deleteActiveCompany() {
+    var c = getActiveCompany();
+    if (!c) return;
+    var empCount = employees.filter(function (e) { return e.companyId === c.id; }).length;
+    var stubCount = stubs.filter(function (s) { return s.companyId === c.id; }).length;
+    var msg = "Delete \"" + c.name + "\"?\n\n" +
+              "This will also remove " + empCount + " employee(s) and " +
+              stubCount + " saved stub(s) for this company.";
+    if (!window.confirm(msg)) return;
+
+    companies = companies.filter(function (x) { return x.id !== c.id; });
+    employees = employees.filter(function (e) { return e.companyId !== c.id; });
+    stubs     = stubs.filter(function (s) { return s.companyId !== c.id; });
+    saveData(STORAGE_KEYS.companies, companies);
+    saveData(STORAGE_KEYS.employees, employees);
+    saveData(STORAGE_KEYS.stubs,     stubs);
+
+    activeCompanyId = companies.length ? companies[0].id : null;
+    saveString(STORAGE_KEYS.activeCompanyId, activeCompanyId || "");
+
+    hydrateCompanySelect();
+    hydrateEmployeeSelect();
+    updateContext();
     generateStub();
   }
 
@@ -218,14 +286,67 @@
     document.getElementById("state").value           = c.state || "IL";
   }
 
+  function clearCompanyFields() {
+    ["companyName", "companyAddress1", "companyAddress2", "companyEin"].forEach(function (id) {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("state").value = "IL";
+  }
+
+  function getActiveCompany() {
+    return companies.find(function (c) { return c.id === activeCompanyId; }) || null;
+  }
+
+  // ===========================================================================
+  // Employee CRUD
+  // ===========================================================================
+  function hydrateEmployeeSelect() {
+    var list = employees.filter(function (e) { return e.companyId === activeCompanyId; });
+    renderSelect(employeeSelect, list, list.length ? "Select employee" : "(no employees yet)");
+    if (list.length) {
+      employeeSelect.value = list[0].id;
+      applyEmployee(list[0]);
+    } else {
+      employeeSelect.value = "";
+      clearEmployeeFields();
+    }
+    refreshEmployeeButtons();
+    renderStubHistory();
+  }
+
+  function refreshEmployeeButtons() {
+    var hasSelection = !!employeeSelect.value;
+    document.getElementById("deleteEmployeeBtn").hidden = !hasSelection;
+    // Disable save/new when no company is selected
+    var disabled = !activeCompanyId;
+    document.getElementById("saveEmployeeBtn").disabled = disabled;
+    document.getElementById("newEmployeeBtn").disabled = disabled;
+    document.getElementById("saveStubBtn").disabled = disabled || !hasSelection;
+  }
+
+  function onEmployeeChange() {
+    var emp = getActiveEmployee();
+    if (emp) applyEmployee(emp); else clearEmployeeFields();
+    refreshEmployeeButtons();
+    renderStubHistory();
+    updateContext();
+    generateStub();
+  }
+
   function saveEmployee() {
     try {
+      if (!activeCompanyId) {
+        flashButton("saveEmployeeBtn", "Pick a company first", true);
+        return;
+      }
       if (!valueOf("employeeName")) {
         flashButton("saveEmployeeBtn", "Name required", true);
         return;
       }
+      var existing = getActiveEmployee();
       var employee = {
-        id: employeeSelect.value || genId(),
+        id:                     employeeSelect.value || genId(),
+        companyId:              activeCompanyId,
         name:                   valueOf("employeeName"),
         employeeId:             valueOf("employeeId"),
         employeeAddress1:       valueOf("employeeAddress1"),
@@ -238,13 +359,19 @@
         isStateExempt:          valueOf("isStateExempt"),
         isSocialSecurityExempt: valueOf("isSocialSecurityExempt"),
         isMedicareExempt:       valueOf("isMedicareExempt"),
-        additionalFederal:      numberOf("additionalFederal")
+        additionalFederal:      numberOf("additionalFederal"),
+        // Preserve existing YTD seed if no new values entered
+        seedYtd: readSeedYtd(existing && existing.seedYtd)
       };
       var idx = employees.findIndex(function (e) { return e.id === employee.id; });
       if (idx >= 0) employees[idx] = employee; else employees.push(employee);
       saveData(STORAGE_KEYS.employees, employees);
-      renderSelect(employeeSelect, employees, "Select employee");
+
+      hydrateEmployeeSelect();
       employeeSelect.value = employee.id;
+      applyEmployee(employee);
+      refreshEmployeeButtons();
+      updateContext();
       generateStub();
       flashButton("saveEmployeeBtn", "Saved \u2713", false);
     } catch (err) {
@@ -253,32 +380,31 @@
     }
   }
 
-  function clearEmployeeForm() {
+  function newEmployeeForm() {
+    if (!activeCompanyId) return;
     employeeSelect.value = "";
-    [
-      "employeeName", "employeeId",
-      "employeeAddress1", "employeeAddress2", "ssnLast4",
-      "hourlyRate", "regularHours", "overtimeHours",
-      "pretaxDeductions", "postTaxDeductions",
-      "additionalFederal",
-      "ytdRegularPay", "ytdRegularHours",
-      "ytdOvertimePay", "ytdOvertimeHours",
-      "ytdFederal", "ytdState",
-      "ytdSocialSecurity", "ytdMedicare",
-      "ytdPretax", "ytdPosttax"
-    ].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.value = "";
-    });
-    document.getElementById("otMultiplier").value         = "1.5";
-    document.getElementById("federalTaxRate").value       = "12";
-    document.getElementById("federalAllowances").value    = "0";
-    document.getElementById("stateExemptions").value      = "0";
-    document.getElementById("federalFilingStatus").value  = "single";
-    document.getElementById("isFederalExempt").value      = "no";
-    document.getElementById("isStateExempt").value        = "no";
-    document.getElementById("isSocialSecurityExempt").value = "no";
-    document.getElementById("isMedicareExempt").value     = "no";
+    clearEmployeeFields();
+    refreshEmployeeButtons();
+    updateContext();
+    generateStub();
+    document.getElementById("employeeName").focus();
+  }
+
+  function deleteActiveEmployee() {
+    var emp = getActiveEmployee();
+    if (!emp) return;
+    var n = stubs.filter(function (s) { return s.employeeId === emp.id; }).length;
+    var msg = "Delete employee \"" + emp.name + "\"?\n\n" +
+              "This will also remove " + n + " saved stub(s).";
+    if (!window.confirm(msg)) return;
+
+    employees = employees.filter(function (x) { return x.id !== emp.id; });
+    stubs     = stubs.filter(function (s) { return s.employeeId !== emp.id; });
+    saveData(STORAGE_KEYS.employees, employees);
+    saveData(STORAGE_KEYS.stubs,     stubs);
+
+    hydrateEmployeeSelect();
+    updateContext();
     generateStub();
   }
 
@@ -296,16 +422,65 @@
     document.getElementById("isSocialSecurityExempt").value = e.isSocialSecurityExempt || "no";
     document.getElementById("isMedicareExempt").value       = e.isMedicareExempt || "no";
     document.getElementById("additionalFederal").value      = String(e.additionalFederal || 0);
+    applySeedYtd(e.seedYtd);
   }
 
-  // ---------------------------------------------------------------------------
-  // Core calculation + render
-  // ---------------------------------------------------------------------------
-  function generateStub() {
-    // --- calcs (unchanged business logic) ---
-    var stateCode      = valueOf("state");
-    var stateCfg       = STATE_CONFIG[stateCode] || STATE_CONFIG.IL;
+  function clearEmployeeFields() {
+    [
+      "employeeName", "employeeId",
+      "employeeAddress1", "employeeAddress2", "ssnLast4"
+    ].forEach(function (id) { document.getElementById(id).value = ""; });
+    document.getElementById("federalFilingStatus").value = "single";
+    document.getElementById("federalAllowances").value = "0";
+    document.getElementById("stateExemptions").value = "0";
+    document.getElementById("additionalFederal").value = "0";
+    document.getElementById("isFederalExempt").value = "no";
+    document.getElementById("isStateExempt").value = "no";
+    document.getElementById("isSocialSecurityExempt").value = "no";
+    document.getElementById("isMedicareExempt").value = "no";
+    applySeedYtd(null);
+  }
 
+  function getActiveEmployee() {
+    return employees.find(function (e) {
+      return e.id === employeeSelect.value && e.companyId === activeCompanyId;
+    }) || null;
+  }
+
+  // ===========================================================================
+  // Seed-YTD (one-time starting balance per employee)
+  // ===========================================================================
+  function readSeedYtd(existing) {
+    var out = existing ? Object.assign({}, existing) : {};
+    var anySet = false;
+    SEED_YTD_FIELDS.forEach(function (id) {
+      var raw = valueOf(id);
+      var key = id.replace("seedYtd", "").toLowerCase();
+      if (raw !== "") {
+        out[key] = Number(raw) || 0;
+        anySet = true;
+      }
+    });
+    return anySet || existing ? out : null;
+  }
+
+  function applySeedYtd(seed) {
+    SEED_YTD_FIELDS.forEach(function (id) {
+      var key = id.replace("seedYtd", "").toLowerCase();
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.value = (seed && seed[key] != null) ? String(seed[key]) : "";
+    });
+  }
+
+  // ===========================================================================
+  // Core calculation + render
+  // ===========================================================================
+  function generateStub() {
+    var stateCode = valueOf("state");
+    var stateCfg  = STATE_CONFIG[stateCode] || STATE_CONFIG.IL;
+
+    // This-period inputs
     var hourlyRate     = numberOf("hourlyRate");
     var regularHours   = numberOf("regularHours");
     var overtimeHours  = numberOf("overtimeHours");
@@ -315,109 +490,101 @@
     var federalRate    = numberOf("federalTaxRate", 12);
     var additionalFed  = numberOf("additionalFederal");
     var fedAllow       = numberOf("federalAllowances");
-    var stateExempt    = numberOf("stateExemptions");
+    var stExemptNum    = numberOf("stateExemptions");
 
-    var regularPay     = regularHours  * hourlyRate;
-    var overtimeRate   = hourlyRate    * otMultiplier;
-    var overtimePay    = overtimeHours * overtimeRate;
-    var grossPay       = regularPay + overtimePay;
-    var taxableWages   = Math.max(0, grossPay - pretax);
+    var fedExempt = valueOf("isFederalExempt")        === "yes";
+    var stExempt  = valueOf("isStateExempt")          === "yes";
+    var ssExempt  = valueOf("isSocialSecurityExempt") === "yes";
+    var mcExempt  = valueOf("isMedicareExempt")       === "yes";
 
-    var fedExempt      = valueOf("isFederalExempt")        === "yes";
-    var stExempt       = valueOf("isStateExempt")          === "yes";
-    var ssExempt       = valueOf("isSocialSecurityExempt") === "yes";
-    var mcExempt       = valueOf("isMedicareExempt")       === "yes";
+    var regularPay   = regularHours  * hourlyRate;
+    var overtimeRate = hourlyRate    * otMultiplier;
+    var overtimePay  = overtimeHours * overtimeRate;
+    var grossPay     = regularPay + overtimePay;
+    var taxableWages = Math.max(0, grossPay - pretax);
 
-    var fedAdj         = fedAllow * 20;
-    var stateAdj       = stateExempt * 10;
+    var fedAdj     = fedAllow * 20;
+    var stateAdj   = stExemptNum * 10;
+    var fedTaxable = Math.max(0, taxableWages - fedAdj);
+    var federalWH  = fedExempt ? 0 : percentage(fedTaxable, federalRate) + additionalFed;
+    var stTaxable  = Math.max(0, taxableWages - stateAdj);
+    var stateWH    = stExempt ? 0 : percentage(stTaxable, stateCfg.defaultStateTaxRate);
+    var socSec     = ssExempt ? 0 : percentage(taxableWages, SOCIAL_SECURITY_RATE);
+    var medicare   = mcExempt ? 0 : percentage(taxableWages, MEDICARE_RATE);
 
-    var fedTaxable     = Math.max(0, taxableWages - fedAdj);
-    var federalWH      = fedExempt ? 0 : percentage(fedTaxable, federalRate) + additionalFed;
+    var totalDed = federalWH + stateWH + socSec + medicare + pretax + posttax;
+    var netPay   = Math.max(0, grossPay - totalDed);
+    var totalHrs = regularHours + overtimeHours;
 
-    var stateRate      = stateCfg.defaultStateTaxRate;
-    var stTaxable      = Math.max(0, taxableWages - stateAdj);
-    var stateWH        = stExempt ? 0 : percentage(stTaxable, stateRate);
-    var socSec         = ssExempt ? 0 : percentage(taxableWages, SOCIAL_SECURITY_RATE);
-    var medicare       = mcExempt ? 0 : percentage(taxableWages, MEDICARE_RATE);
+    // YTD = starting seed + sum of prior-saved stubs this tax year + this stub
+    var year = yearFromInputDate(valueOf("payDate"));
+    var roll = rollupYtd(activeCompanyId, employeeSelect.value, year);
+    var current = {
+      regularHours: regularHours, regularPay: regularPay,
+      overtimeHours: overtimeHours, overtimePay: overtimePay,
+      federalWH: federalWH, stateWH: stateWH, socSec: socSec,
+      medicare: medicare, pretax: pretax, posttax: posttax,
+      grossPay: grossPay, netPay: netPay
+    };
 
-    var totalDeductions = federalWH + stateWH + socSec + medicare + pretax + posttax;
-    var netPay          = Math.max(0, grossPay - totalDeductions);
-    var totalHours      = regularHours + overtimeHours;
+    var ytd = {
+      regularHours: roll.regularHours + current.regularHours,
+      regularPay:   roll.regularPay   + current.regularPay,
+      overtimeHours: roll.overtimeHours + current.overtimeHours,
+      overtimePay:  roll.overtimePay  + current.overtimePay,
+      federalWH:    roll.federalWH    + current.federalWH,
+      stateWH:      roll.stateWH      + current.stateWH,
+      socSec:       roll.socSec       + current.socSec,
+      medicare:     roll.medicare     + current.medicare,
+      pretax:       roll.pretax       + current.pretax,
+      posttax:      roll.posttax      + current.posttax,
+      grossPay:     roll.grossPay     + current.grossPay,
+      netPay:       roll.netPay       + current.netPay
+    };
+    ytd.totalHours = ytd.regularHours + ytd.overtimeHours;
+    ytd.totalDed   = ytd.federalWH + ytd.stateWH + ytd.socSec + ytd.medicare + ytd.pretax + ytd.posttax;
 
-    // --- YTD (user-entered; fall back to this period's values) ---
-    var ytdRegHrs   = numberOrFallback("ytdRegularHours",  regularHours);
-    var ytdRegPay   = numberOrFallback("ytdRegularPay",    regularPay);
-    var ytdOtHrs    = numberOrFallback("ytdOvertimeHours", overtimeHours);
-    var ytdOtPay    = numberOrFallback("ytdOvertimePay",   overtimePay);
-    var ytdFederal  = numberOrFallback("ytdFederal",       federalWH);
-    var ytdState    = numberOrFallback("ytdState",         stateWH);
-    var ytdSocSec   = numberOrFallback("ytdSocialSecurity", socSec);
-    var ytdMc       = numberOrFallback("ytdMedicare",      medicare);
-    var ytdPretax   = numberOrFallback("ytdPretax",        pretax);
-    var ytdPosttax  = numberOrFallback("ytdPosttax",       posttax);
-
-    var ytdGross  = ytdRegPay + ytdOtPay;
-    var ytdHours  = ytdRegHrs + ytdOtHrs;
-    var ytdTotDed = ytdFederal + ytdState + ytdSocSec + ytdMc + ytdPretax + ytdPosttax;
-    var ytdNet    = Math.max(0, ytdGross - ytdTotDed);
-
-    // --- earnings rows ---
+    // Earnings rows
     var earningsLines = [];
-    // Only show the "Hourly" row if there are regular hours/rate to display.
-    if (hourlyRate > 0 || regularHours > 0 || ytdRegPay > 0) {
+    if (hourlyRate > 0 || regularHours > 0 || ytd.regularPay > 0) {
       earningsLines.push({
-        desc:     "Hourly",
-        hours:    regularHours,
-        rate:     hourlyRate,
-        current:  regularPay,
-        ytdHours: ytdRegHrs,
-        ytd:      ytdRegPay
+        desc: "Hourly",
+        hours: regularHours, rate: hourlyRate, current: regularPay,
+        ytdHours: ytd.regularHours, ytd: ytd.regularPay
       });
     }
-    if (overtimeHours > 0 || overtimePay > 0 || ytdOtPay > 0) {
+    if (overtimeHours > 0 || overtimePay > 0 || ytd.overtimePay > 0) {
       earningsLines.push({
-        desc:     "Overtime",
-        hours:    overtimeHours,
-        rate:     overtimeRate,
-        current:  overtimePay,
-        ytdHours: ytdOtHrs,
-        ytd:      ytdOtPay
+        desc: "Overtime",
+        hours: overtimeHours, rate: overtimeRate, current: overtimePay,
+        ytdHours: ytd.overtimeHours, ytd: ytd.overtimePay
       });
     }
     if (earningsLines.length === 0) {
-      // Always render at least one Hourly line for a clean look
       earningsLines.push({ desc: "Hourly", hours: 0, rate: 0, current: 0, ytdHours: 0, ytd: 0 });
     }
     renderEarnings("earningsRows", earningsLines);
 
-    // --- withholdings rows (filing-status column populated for fed/state) ---
-    var fedStatus   = FILING_ABBREV[valueOf("federalFilingStatus")] || "S";
-    var fedStatusLabel   = fedStatus + " " + fedAllow;          // e.g. "S 0"
-    var stateStatusLabel = stateExempt > 0 ? String(stateExempt) : "0 0";
+    // Withholdings rows
+    var fedStatusCode  = FILING_ABBREV[valueOf("federalFilingStatus")] || "S";
+    var fedStatusLabel = fedStatusCode + " " + fedAllow;
+    var stStatusLabel  = stExemptNum > 0 ? String(stExemptNum) : "0 0";
 
     var whLines = [
-      { label: "Social Security",                       filing: "",               amount: socSec,     ytd: ytdSocSec },
-      { label: "Medicare",                              filing: "",               amount: medicare,   ytd: ytdMc     },
-      { label: "Fed Income Tax",                        filing: fedStatusLabel,   amount: federalWH,  ytd: ytdFederal },
-      { label: stateCfg.code + " Income Tax",           filing: stateStatusLabel, amount: stateWH,    ytd: ytdState   }
+      { label: "Social Security",              filing: "",              amount: socSec,    ytd: ytd.socSec    },
+      { label: "Medicare",                     filing: "",              amount: medicare,  ytd: ytd.medicare  },
+      { label: "Fed Income Tax",               filing: fedStatusLabel,  amount: federalWH, ytd: ytd.federalWH },
+      { label: stateCfg.code + " Income Tax",  filing: stStatusLabel,   amount: stateWH,   ytd: ytd.stateWH   }
     ];
-    if (pretax  > 0 || ytdPretax  > 0) whLines.push({ label: "Pre-tax Deductions",  filing: "", amount: pretax,  ytd: ytdPretax  });
-    if (posttax > 0 || ytdPosttax > 0) whLines.push({ label: "Post-tax Deductions", filing: "", amount: posttax, ytd: ytdPosttax });
-
+    if (pretax  > 0 || ytd.pretax  > 0) whLines.push({ label: "Pre-tax Deductions",  filing: "", amount: pretax,  ytd: ytd.pretax  });
+    if (posttax > 0 || ytd.posttax > 0) whLines.push({ label: "Post-tax Deductions", filing: "", amount: posttax, ytd: ytd.posttax });
     renderWithholdings("deductionRows", whLines);
 
-    // --- stub meta ---
     updateStubMeta({
-      stateLabel:       stateCfg.label,
-      stateCode:        stateCfg.code,
-      grossPay:         grossPay,
-      totalDeductions:  totalDeductions,
-      netPay:           netPay,
-      totalHours:       totalHours,
-      ytdGross:         ytdGross,
-      ytdTotDed:        ytdTotDed,
-      ytdNet:           ytdNet,
-      ytdHours:         ytdHours
+      stateLabel: stateCfg.label, stateCode: stateCfg.code,
+      grossPay: grossPay, totalDeductions: totalDed, netPay: netPay,
+      totalHours: totalHrs,
+      ytdGross: ytd.grossPay, ytdTotDed: ytd.totalDed, ytdNet: ytd.netPay, ytdHours: ytd.totalHours
     });
   }
 
@@ -452,9 +619,6 @@
   }
 
   function updateStubMeta(d) {
-    var filingMap = { single: "Single", married: "Married", head: "Head of household" };
-    var freq      = valueOf("payFrequency");
-
     var companyName = (valueOf("companyName") || "Company Name").toUpperCase();
     setText("stubCompanyName",     companyName);
     setText("stubCompanyAddress1", (valueOf("companyAddress1") || "Address line 1").toUpperCase());
@@ -463,30 +627,26 @@
     setText("stubLoc",             "LOC: " + (d.stateCode || "--"));
     setText("stubEeDd",            "EE ID: " + (valueOf("employeeId") || "--") + " DD");
 
-    // Upper mailing block (Paychex-style, ALL CAPS name + address)
     setText("stubEeNameUpper",  (valueOf("employeeName")     || "--").toUpperCase());
     setText("stubEeAddrUpper1", (valueOf("employeeAddress1") || "--").toUpperCase());
     setText("stubEeAddrUpper2", (valueOf("employeeAddress2") || "--").toUpperCase());
 
-    // Personal & check info block (normal case)
-    setText("stubEmployeeName",     valueOf("employeeName")     || "--");
-    setText("stubEmployeeAddr1",    valueOf("employeeAddress1") || "--");
-    setText("stubEmployeeAddr2",    valueOf("employeeAddress2") || "--");
-    setText("stubEmployeeId",       valueOf("employeeId")       || "--");
-    setText("stubSsn",              formatSsn(valueOf("ssnLast4")));
-    setText("stubFilingStatus",     filingMap[valueOf("federalFilingStatus")] || "Single");
+    setText("stubEmployeeName",      valueOf("employeeName")     || "--");
+    setText("stubEmployeeAddr1",     valueOf("employeeAddress1") || "--");
+    setText("stubEmployeeAddr2",     valueOf("employeeAddress2") || "--");
+    setText("stubEmployeeId",        valueOf("employeeId")       || "--");
+    setText("stubSsn",               formatSsn(valueOf("ssnLast4")));
+    setText("stubFilingStatus",      FILING_LABEL[valueOf("federalFilingStatus")] || "Single");
     setText("stubFederalAllowances", String(numberOf("federalAllowances")));
     setText("stubStateExemptions",   String(numberOf("stateExemptions")));
     setText("stubFederalExempt",     valueOf("isFederalExempt") === "yes" ? "Yes" : "No");
     setText("stubStateExempt",       valueOf("isStateExempt")   === "yes" ? "Yes" : "No");
 
-    // Dates & frequency
     setText("stubPayDate",       readableDate(valueOf("payDate")));
     setText("stubPayPeriod",     readableDate(valueOf("periodStart")) + " to " + readableDate(valueOf("periodEnd")));
-    setText("stubPayFrequency",  FREQUENCY_LABEL[freq] || "--");
+    setText("stubPayFrequency",  FREQUENCY_LABEL[valueOf("payFrequency")] || "--");
     setText("stubState",         d.stateLabel);
 
-    // Totals
     setText("stubGrossPay",            formatMoney(d.grossPay));
     setText("stubTotalDeductions",     formatMoney(d.totalDeductions));
     setText("stubNetPay",              formatMoney(d.netPay));
@@ -497,35 +657,308 @@
     setText("stubYtdNet",              formatMoney(d.ytdNet));
     setText("stubYtdTotalHours",       formatHours(d.ytdHours));
 
-    // Footer strip (subtle address echo)
     var co = valueOf("companyName") || "";
     var cityLine = valueOf("companyAddress2") || "";
     setText("stubFooter", co && cityLine ? (co + " \u2022 " + cityLine) : "\u00A0");
   }
 
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // Stub history + YTD rollup
+  // ===========================================================================
+  function rollupYtd(companyId, employeeId, year) {
+    var emp = employees.find(function (e) { return e.id === employeeId; });
+    var seed = (emp && emp.seedYtd) ? emp.seedYtd : {};
+    // Seed uses lowercased keys: hours, gross, federal, state, socialsecurity, medicare, pretax, posttax
+    var acc = {
+      regularHours: Number(seed.hours || 0),
+      regularPay:   Number(seed.gross || 0),
+      overtimeHours: 0, overtimePay: 0,
+      federalWH:    Number(seed.federal || 0),
+      stateWH:      Number(seed.state || 0),
+      socSec:       Number(seed.socialsecurity || 0),
+      medicare:     Number(seed.medicare || 0),
+      pretax:       Number(seed.pretax || 0),
+      posttax:      Number(seed.posttax || 0),
+      grossPay:     Number(seed.gross || 0),
+      netPay:       0
+    };
+    // Seed net pay can't be derived, so store implicit: seed grossly covers aggregate, net for seed = gross - all deductions
+    acc.netPay = Math.max(0, acc.grossPay - (acc.federalWH + acc.stateWH + acc.socSec + acc.medicare + acc.pretax + acc.posttax));
 
-  // Safe unique ID. crypto.randomUUID() requires a secure context (HTTPS or
-  // localhost) AND a recent-enough browser — on older Safari or plain HTTP it
-  // throws and silently breaks Save. This fallback keeps Save working anywhere.
+    stubs.forEach(function (s) {
+      if (s.companyId !== companyId) return;
+      if (s.employeeId !== employeeId) return;
+      if (yearFromInputDate(s.payDate) !== year) return;
+      acc.regularHours  += num(s.regularHours);
+      acc.regularPay    += num(s.regularPay);
+      acc.overtimeHours += num(s.overtimeHours);
+      acc.overtimePay   += num(s.overtimePay);
+      acc.federalWH     += num(s.federalWH);
+      acc.stateWH       += num(s.stateWH);
+      acc.socSec        += num(s.socSec);
+      acc.medicare      += num(s.medicare);
+      acc.pretax        += num(s.pretax);
+      acc.posttax       += num(s.posttax);
+      acc.grossPay      += num(s.grossPay);
+      acc.netPay        += num(s.netPay);
+    });
+    return acc;
+  }
+
+  function saveStubToHistory() {
+    try {
+      if (!activeCompanyId) { flashButton("saveStubBtn", "Pick a company", true); return; }
+      if (!employeeSelect.value) { flashButton("saveStubBtn", "Pick an employee", true); return; }
+
+      var stateCfg = STATE_CONFIG[valueOf("state")] || STATE_CONFIG.IL;
+      var hourlyRate    = numberOf("hourlyRate");
+      var regularHours  = numberOf("regularHours");
+      var overtimeHours = numberOf("overtimeHours");
+      var otMultiplier  = numberOf("otMultiplier", 1.5);
+      var pretax        = numberOf("pretaxDeductions");
+      var posttax       = numberOf("postTaxDeductions");
+      var federalRate   = numberOf("federalTaxRate", 12);
+      var additionalFed = numberOf("additionalFederal");
+      var fedAllow      = numberOf("federalAllowances");
+      var stExemptNum   = numberOf("stateExemptions");
+
+      var regularPay   = regularHours * hourlyRate;
+      var overtimeRate = hourlyRate * otMultiplier;
+      var overtimePay  = overtimeHours * overtimeRate;
+      var grossPay     = regularPay + overtimePay;
+      var taxableWages = Math.max(0, grossPay - pretax);
+
+      var fedExempt = valueOf("isFederalExempt")        === "yes";
+      var stExempt  = valueOf("isStateExempt")          === "yes";
+      var ssExempt  = valueOf("isSocialSecurityExempt") === "yes";
+      var mcExempt  = valueOf("isMedicareExempt")       === "yes";
+
+      var federalWH = fedExempt ? 0 : percentage(Math.max(0, taxableWages - fedAllow * 20), federalRate) + additionalFed;
+      var stateWH   = stExempt  ? 0 : percentage(Math.max(0, taxableWages - stExemptNum * 10), stateCfg.defaultStateTaxRate);
+      var socSec    = ssExempt  ? 0 : percentage(taxableWages, SOCIAL_SECURITY_RATE);
+      var medicare  = mcExempt  ? 0 : percentage(taxableWages, MEDICARE_RATE);
+      var totalDed  = federalWH + stateWH + socSec + medicare + pretax + posttax;
+      var netPay    = Math.max(0, grossPay - totalDed);
+
+      var payDate = valueOf("payDate");
+      if (!payDate) { flashButton("saveStubBtn", "Pay date required", true); return; }
+
+      // Idempotent: same company+employee+payDate replaces prior record.
+      var existingIdx = stubs.findIndex(function (s) {
+        return s.companyId === activeCompanyId &&
+               s.employeeId === employeeSelect.value &&
+               s.payDate === payDate;
+      });
+
+      var stub = {
+        id:           existingIdx >= 0 ? stubs[existingIdx].id : genId(),
+        companyId:    activeCompanyId,
+        employeeId:   employeeSelect.value,
+        payDate:      payDate,
+        periodStart:  valueOf("periodStart"),
+        periodEnd:    valueOf("periodEnd"),
+        payFrequency: valueOf("payFrequency"),
+        hourlyRate: hourlyRate, otMultiplier: otMultiplier,
+        regularHours: regularHours, regularPay: regularPay,
+        overtimeHours: overtimeHours, overtimePay: overtimePay,
+        grossPay: grossPay, pretax: pretax, posttax: posttax,
+        federalWH: federalWH, stateWH: stateWH, socSec: socSec, medicare: medicare,
+        totalDeductions: totalDed, netPay: netPay,
+        savedAt: new Date().toISOString()
+      };
+
+      if (existingIdx >= 0) stubs[existingIdx] = stub; else stubs.push(stub);
+      saveData(STORAGE_KEYS.stubs, stubs);
+      renderStubHistory();
+      generateStub();
+      flashButton("saveStubBtn", existingIdx >= 0 ? "Updated \u2713" : "Saved \u2713", false);
+    } catch (err) {
+      console.error("saveStubToHistory failed:", err);
+      flashButton("saveStubBtn", "Save failed", true);
+    }
+  }
+
+  function renderStubHistory() {
+    var root = document.getElementById("stubHistory");
+    var yearLabel = document.getElementById("historyYearLabel");
+    var year = yearFromInputDate(valueOf("payDate"));
+    yearLabel.textContent = year ? String(year) : "";
+
+    var list = stubs
+      .filter(function (s) {
+        return s.companyId === activeCompanyId &&
+               s.employeeId === employeeSelect.value &&
+               yearFromInputDate(s.payDate) === year;
+      })
+      .sort(function (a, b) { return b.payDate.localeCompare(a.payDate); });
+
+    if (!list.length) {
+      root.innerHTML = '<p class="empty-note">No saved stubs yet. Click <strong>Save stub to history</strong> after generating to start accumulating YTD.</p>';
+      return;
+    }
+
+    root.innerHTML = "";
+    list.forEach(function (s) {
+      var row = document.createElement("div");
+      row.className = "history-row";
+      row.innerHTML =
+        '<span class="h-date">' + readableDate(s.payDate) + '</span>' +
+        '<span class="h-amounts">Gross <strong>' + formatMoney(s.grossPay) +
+        '</strong> &nbsp;&bull;&nbsp; Net <strong>' + formatMoney(s.netPay) + '</strong></span>' +
+        '<button type="button" class="h-load" data-id="' + s.id + '">Load</button>' +
+        '<button type="button" class="h-delete" data-id="' + s.id + '">Delete</button>';
+      root.appendChild(row);
+    });
+
+    root.querySelectorAll(".h-load").forEach(function (btn) {
+      btn.addEventListener("click", function () { loadStubFromHistory(btn.dataset.id); });
+    });
+    root.querySelectorAll(".h-delete").forEach(function (btn) {
+      btn.addEventListener("click", function () { deleteStubFromHistory(btn.dataset.id); });
+    });
+  }
+
+  function loadStubFromHistory(id) {
+    var s = stubs.find(function (x) { return x.id === id; });
+    if (!s) return;
+    document.getElementById("payDate").value       = s.payDate || "";
+    document.getElementById("periodStart").value   = s.periodStart || "";
+    document.getElementById("periodEnd").value     = s.periodEnd || "";
+    document.getElementById("payFrequency").value  = s.payFrequency || "biweekly";
+    document.getElementById("hourlyRate").value    = String(s.hourlyRate || "");
+    document.getElementById("regularHours").value  = String(s.regularHours || "");
+    document.getElementById("overtimeHours").value = String(s.overtimeHours || "");
+    document.getElementById("otMultiplier").value  = String(s.otMultiplier || 1.5);
+    document.getElementById("pretaxDeductions").value  = String(s.pretax || 0);
+    document.getElementById("postTaxDeductions").value = String(s.posttax || 0);
+    generateStub();
+  }
+
+  function deleteStubFromHistory(id) {
+    var s = stubs.find(function (x) { return x.id === id; });
+    if (!s) return;
+    if (!window.confirm("Delete the stub dated " + readableDate(s.payDate) + "?")) return;
+    stubs = stubs.filter(function (x) { return x.id !== id; });
+    saveData(STORAGE_KEYS.stubs, stubs);
+    renderStubHistory();
+    generateStub();
+  }
+
+  // ===========================================================================
+  // Export / Import JSON
+  // ===========================================================================
+  function exportJSON() {
+    var payload = {
+      exportedAt: new Date().toISOString(),
+      version: 1,
+      companies: companies,
+      employees: employees,
+      stubs: stubs
+    };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "paystub-pal-backup-" + toInputDate(new Date()) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 500);
+    flashButton("exportBtn", "Exported \u2713", false);
+  }
+
+  function importJSON(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        if (!data || typeof data !== "object") throw new Error("Invalid JSON");
+
+        var mode = window.confirm(
+          "Import " +
+          (Array.isArray(data.companies) ? data.companies.length : 0) + " companies, " +
+          (Array.isArray(data.employees) ? data.employees.length : 0) + " employees, " +
+          (Array.isArray(data.stubs) ? data.stubs.length : 0) + " stubs.\n\n" +
+          "OK = Merge (keep existing, add/replace by ID)\n" +
+          "Cancel = Abort"
+        );
+        if (!mode) return;
+
+        if (Array.isArray(data.companies)) companies = mergeById(companies, data.companies);
+        if (Array.isArray(data.employees)) employees = mergeById(employees, data.employees);
+        if (Array.isArray(data.stubs))     stubs     = mergeById(stubs,     data.stubs);
+        saveData(STORAGE_KEYS.companies, companies);
+        saveData(STORAGE_KEYS.employees, employees);
+        saveData(STORAGE_KEYS.stubs,     stubs);
+
+        if (!activeCompanyId && companies.length) {
+          activeCompanyId = companies[0].id;
+          saveString(STORAGE_KEYS.activeCompanyId, activeCompanyId);
+        }
+        hydrateCompanySelect();
+        hydrateEmployeeSelect();
+        updateContext();
+        generateStub();
+        flashButton("importBtn", "Imported \u2713", false);
+      } catch (err) {
+        console.error("importJSON failed:", err);
+        flashButton("importBtn", "Import failed", true);
+        window.alert("Could not import that file. It should be a paystub-pal JSON export.");
+      } finally {
+        e.target.value = "";
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function mergeById(existing, incoming) {
+    var byId = {};
+    existing.forEach(function (x) { byId[x.id] = x; });
+    incoming.forEach(function (x) { if (x && x.id) byId[x.id] = x; });
+    return Object.keys(byId).map(function (k) { return byId[k]; });
+  }
+
+  // ===========================================================================
+  // Context indicator
+  // ===========================================================================
+  function updateContext() {
+    var c = getActiveCompany();
+    var emp = getActiveEmployee();
+    var line = document.getElementById("contextLine");
+    var sub = document.getElementById("fsEmployeeSub");
+
+    if (!c) {
+      line.hidden = true;
+      sub.textContent = "";
+      return;
+    }
+    line.hidden = false;
+    var parts = ["<strong>" + esc(c.name) + "</strong>"];
+    if (emp) parts.push("<strong>" + esc(emp.name) + "</strong>");
+    line.innerHTML = parts.join(" &rsaquo; ");
+    sub.textContent = "under " + c.name;
+  }
+
+  // ===========================================================================
+  // Helpers
+  // ===========================================================================
   function genId() {
     try {
       if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
         return crypto.randomUUID();
       }
-    } catch (_) { /* fall through to fallback */ }
+    } catch (_) { /* fall through */ }
     return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
   }
 
-  // Brief inline feedback on a button so users know Save worked (or didn't).
   function flashButton(id, text, isError) {
     var btn = document.getElementById(id);
     if (!btn) return;
     if (btn.dataset.flashOriginal == null) btn.dataset.flashOriginal = btn.textContent;
     btn.textContent = text;
-    btn.classList.toggle("is-error", !!isError);
+    btn.classList.toggle("is-error",   !!isError);
     btn.classList.toggle("is-success", !isError);
     clearTimeout(btn._flashTimer);
     btn._flashTimer = setTimeout(function () {
@@ -535,14 +968,19 @@
   }
 
   function toInputDate(date) {
-    // Local-time YYYY-MM-DD (avoids UTC off-by-one)
     var y = date.getFullYear();
     var m = String(date.getMonth() + 1).padStart(2, "0");
     var d = String(date.getDate()).padStart(2, "0");
     return y + "-" + m + "-" + d;
   }
 
-  // MM/DD/YY, locale-proof (hard-locked format).
+  function yearFromInputDate(raw) {
+    if (!raw) return null;
+    var parts = String(raw).split("-");
+    if (parts.length !== 3) return null;
+    return Number(parts[0]) || null;
+  }
+
   function readableDate(raw) {
     if (!raw) return "--";
     var parts = String(raw).split("-");
@@ -555,19 +993,12 @@
     return Math.max(0, base) * (Math.max(0, rate) / 100);
   }
 
-  // Money — no currency symbol in cells; thousands sep + 2 decimals (stub style).
   function formatMoney(n) {
-    var v = Number(n || 0);
-    return v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  function formatHours(n) {
-    return Number(n || 0).toFixed(4);
-  }
-
-  function formatRate(n) {
-    return Number(n || 0).toFixed(2);
-  }
+  function formatHours(n) { return Number(n || 0).toFixed(4); }
+  function formatRate(n)  { return Number(n || 0).toFixed(2); }
 
   function formatSsn(last4) {
     var digits = String(last4 || "").replace(/\D/g, "").slice(-4);
@@ -587,21 +1018,7 @@
     return Number.isFinite(v) ? v : (fallback || 0);
   }
 
-  // Returns the input value if blank OR invalid; otherwise returns the fallback.
-  // Used for YTD fields that should fall back to this period's value when blank.
-  function numberOrFallback(id, fallback) {
-    var el = document.getElementById(id);
-    if (!el || el.value.trim() === "") return fallback || 0;
-    var v = Number(el.value);
-    return Number.isFinite(v) ? v : (fallback || 0);
-  }
-
-  function optionalNumber(id) {
-    var el = document.getElementById(id);
-    if (!el || el.value.trim() === "") return null;
-    var v = Number(el.value);
-    return Number.isFinite(v) ? v : null;
-  }
+  function num(v) { var n = Number(v); return Number.isFinite(n) ? n : 0; }
 
   function setText(id, value) {
     var el = document.getElementById(id);
@@ -613,18 +1030,42 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  function renderSelect(selectEl, list, placeholder) {
+    selectEl.innerHTML = "";
+    var base = document.createElement("option");
+    base.value = "";
+    base.textContent = placeholder;
+    selectEl.appendChild(base);
+    list.forEach(function (r) {
+      var opt = document.createElement("option");
+      opt.value = r.id;
+      opt.textContent = r.name;
+      selectEl.appendChild(opt);
+    });
+  }
+
   function loadData(key) {
     try {
       var raw = localStorage.getItem(key);
       if (!raw) return [];
       var parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
-      return [];
-    }
+    } catch (_) { return []; }
   }
 
   function saveData(key, payload) {
-    localStorage.setItem(key, JSON.stringify(payload));
+    try { localStorage.setItem(key, JSON.stringify(payload)); }
+    catch (err) { console.warn("localStorage write failed for " + key + ":", err); }
   }
+
+  function loadString(key) {
+    try { return localStorage.getItem(key) || ""; }
+    catch (_) { return ""; }
+  }
+
+  function saveString(key, value) {
+    try { localStorage.setItem(key, value || ""); }
+    catch (err) { console.warn("localStorage write failed for " + key + ":", err); }
+  }
+
 })();

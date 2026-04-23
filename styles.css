@@ -250,6 +250,162 @@ button.is-error {
   border-color: transparent !important;
 }
 
+button.ghost.danger {
+  color: #a81f1f;
+  border-color: #e5c5c5;
+  margin-left: auto;
+}
+
+button.ghost.danger:hover {
+  background: #fef2f2;
+  border-color: #a81f1f;
+  color: #a81f1f;
+}
+
+/* ---- Context line (Company › Employee indicator) ---- */
+.context-line {
+  margin-top: 0.6rem;
+  padding: 0.45rem 0.65rem;
+  background: #f5f6f8;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.context-line strong { font-weight: 600; color: var(--ink); }
+
+/* ---- Empty state ---- */
+.empty-state {
+  background: #fffaf0;
+  border: 1px dashed #e0c57a;
+  border-radius: var(--radius-sm);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.86rem;
+  color: #6b4e0a;
+}
+
+/* ---- Legend sub-label (e.g. under active company) ---- */
+.legend-sub {
+  margin-left: 0.5rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+/* ---- Seed YTD collapsible ---- */
+details.seed-ytd {
+  margin-top: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  background: #fafbfc;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
+details.seed-ytd > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  list-style: none;
+  user-select: none;
+}
+
+details.seed-ytd > summary::-webkit-details-marker { display: none; }
+
+details.seed-ytd > summary::before {
+  content: "▸ ";
+  display: inline-block;
+  width: 1em;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+
+details.seed-ytd[open] > summary::before {
+  content: "▾ ";
+}
+
+details.seed-ytd[open] {
+  background: #fff;
+  border-color: var(--line);
+}
+
+details.seed-ytd > p.field-note {
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+details.seed-ytd .grid {
+  margin-top: 0.5rem;
+}
+
+/* ---- Stub history list ---- */
+.stub-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.stub-history .empty-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 0.55rem 0;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.5rem 0.65rem;
+  background: #fafbfc;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+}
+
+.history-row:hover {
+  border-color: var(--line-strong);
+  background: #fff;
+}
+
+.history-row .h-date {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.history-row .h-amounts {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-row .h-amounts strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.history-row .h-load,
+.history-row .h-delete {
+  font-size: 0.72rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  cursor: pointer;
+}
+
+.history-row .h-load:hover { border-color: var(--ink); }
+.history-row .h-delete {
+  color: #a81f1f;
+  border-color: #e5c5c5;
+}
+.history-row .h-delete:hover { background: #fef2f2; border-color: #a81f1f; }
+
 /* =============================================================================
    Preview panel
    ============================================================================= */

@@ -16,17 +16,23 @@
       <header class="controls-head">
         <p class="eyebrow">PayStub Pal</p>
         <h1>Earnings Statement Generator</h1>
-        <p class="intro">Fill in the fields — the stub on the right updates live. Print on US Letter.</p>
+        <p class="intro">Multi-company payroll stub generator. Saves locally, exports to JSON for backup.</p>
+        <p id="contextLine" class="context-line" hidden></p>
       </header>
 
       <form id="paystub-form" novalidate>
 
+        <!-- Empty state (shown when there are no companies yet) -->
+        <div id="emptyState" class="empty-state" hidden>
+          <p><strong>No companies saved yet.</strong> Add your first company below to get started.</p>
+        </div>
+
         <!-- Company -->
-        <fieldset>
+        <fieldset id="fsCompany">
           <legend>Company</legend>
           <div class="grid">
-            <label>Saved companies
-              <select id="companySelect" aria-label="Saved companies"></select>
+            <label>Active company
+              <select id="companySelect" aria-label="Active company"></select>
             </label>
             <label>Company name
               <input id="companyName" type="text" autocomplete="organization" placeholder="e.g. Your Company, LLC" />
@@ -51,14 +57,15 @@
             </div>
           </div>
           <div class="actions">
-            <button type="button" class="ghost" id="newCompanyBtn">New</button>
+            <button type="button" class="ghost" id="newCompanyBtn">+ New</button>
             <button type="button" class="primary" id="saveCompanyBtn">Save company</button>
+            <button type="button" class="ghost danger" id="deleteCompanyBtn" hidden>Delete</button>
           </div>
         </fieldset>
 
         <!-- Employee -->
-        <fieldset>
-          <legend>Employee</legend>
+        <fieldset id="fsEmployee">
+          <legend>Employee <span class="legend-sub" id="fsEmployeeSub"></span></legend>
           <div class="grid">
             <label>Saved employees
               <select id="employeeSelect" aria-label="Saved employees"></select>
@@ -72,10 +79,10 @@
               </label>
             </div>
             <div class="grid two-col">
-              <label>Employee address line 1
+              <label>Address line 1
                 <input id="employeeAddress1" type="text" />
               </label>
-              <label>Employee address line 2
+              <label>Address line 2
                 <input id="employeeAddress2" type="text" placeholder="City, ST ZIP" />
               </label>
             </div>
@@ -134,9 +141,46 @@
               <span></span>
             </div>
           </div>
+
+          <!-- Starting YTD seed (collapsible; only needed when onboarding mid-year) -->
+          <details class="seed-ytd" id="seedYtdDetails">
+            <summary>Starting YTD seed (optional, mid-year hires only)</summary>
+            <p class="field-note">
+              Only needed when onboarding someone who has already been paid for part of this year.
+              Normal YTD auto-rolls up from stubs you save to history below.
+            </p>
+            <div class="grid two-col">
+              <label>Seed YTD hours
+                <input id="seedYtdHours" type="number" min="0" step="0.0001" />
+              </label>
+              <label>Seed YTD gross
+                <input id="seedYtdGross" type="number" min="0" step="0.01" />
+              </label>
+              <label>Seed YTD federal w/h
+                <input id="seedYtdFederal" type="number" min="0" step="0.01" />
+              </label>
+              <label>Seed YTD state w/h
+                <input id="seedYtdState" type="number" min="0" step="0.01" />
+              </label>
+              <label>Seed YTD Social Security
+                <input id="seedYtdSocialSecurity" type="number" min="0" step="0.01" />
+              </label>
+              <label>Seed YTD Medicare
+                <input id="seedYtdMedicare" type="number" min="0" step="0.01" />
+              </label>
+              <label>Seed YTD pre-tax
+                <input id="seedYtdPretax" type="number" min="0" step="0.01" />
+              </label>
+              <label>Seed YTD post-tax
+                <input id="seedYtdPosttax" type="number" min="0" step="0.01" />
+              </label>
+            </div>
+          </details>
+
           <div class="actions">
-            <button type="button" class="ghost" id="newEmployeeBtn">New</button>
+            <button type="button" class="ghost" id="newEmployeeBtn">+ New</button>
             <button type="button" class="primary" id="saveEmployeeBtn">Save employee</button>
+            <button type="button" class="ghost danger" id="deleteEmployeeBtn" hidden>Delete</button>
           </div>
         </fieldset>
 
@@ -165,10 +209,10 @@
               <input id="periodEnd" type="date" readonly aria-readonly="true" />
             </label>
           </div>
-          <p class="field-note">Period dates are auto-calculated from Pay Frequency and Pay Date.</p>
+          <p class="field-note">Period dates auto-calculate from Pay Frequency and Pay Date.</p>
         </fieldset>
 
-        <!-- Earnings -->
+        <!-- Earnings for this stub -->
         <fieldset>
           <legend>Earnings — this period</legend>
           <div class="grid four-col">
@@ -203,53 +247,37 @@
               <input id="postTaxDeductions" type="number" min="0" step="0.01" value="0" />
             </label>
           </div>
-          <p class="field-note" style="margin-top: 0.45rem;">State tax is baked in per state (Illinois 4.95%).</p>
+          <p class="field-note" style="margin-top: 0.45rem;">State tax rate is baked in per state (Illinois 4.95%).</p>
         </fieldset>
 
-        <!-- YTD -->
-        <fieldset>
-          <legend>Year-to-date (optional)</legend>
-          <p class="field-note" style="margin: -0.3rem 0 0.6rem;">
-            Leave blank to use this period's values. Totals recalculate automatically.
-          </p>
-          <div class="grid two-col">
-            <label>YTD regular hours
-              <input id="ytdRegularHours" type="number" min="0" step="0.0001" />
-            </label>
-            <label>YTD regular pay
-              <input id="ytdRegularPay" type="number" min="0" step="0.01" />
-            </label>
-            <label>YTD OT hours
-              <input id="ytdOvertimeHours" type="number" min="0" step="0.0001" />
-            </label>
-            <label>YTD OT pay
-              <input id="ytdOvertimePay" type="number" min="0" step="0.01" />
-            </label>
-            <label>YTD federal w/h
-              <input id="ytdFederal" type="number" min="0" step="0.01" />
-            </label>
-            <label>YTD state w/h
-              <input id="ytdState" type="number" min="0" step="0.01" />
-            </label>
-            <label>YTD Social Security
-              <input id="ytdSocialSecurity" type="number" min="0" step="0.01" />
-            </label>
-            <label>YTD Medicare
-              <input id="ytdMedicare" type="number" min="0" step="0.01" />
-            </label>
-            <label>YTD pre-tax
-              <input id="ytdPretax" type="number" min="0" step="0.01" />
-            </label>
-            <label>YTD post-tax
-              <input id="ytdPosttax" type="number" min="0" step="0.01" />
-            </label>
+        <!-- Primary actions -->
+        <div class="actions actions--primary">
+          <button type="submit" class="primary">Generate stub</button>
+          <button type="button" class="primary" id="saveStubBtn">Save stub to history</button>
+          <button type="button" class="ghost" id="printStubBtn">Print stub</button>
+        </div>
+
+        <!-- Stub history -->
+        <fieldset id="fsHistory">
+          <legend>Stub history <span class="legend-sub" id="historyYearLabel"></span></legend>
+          <div id="stubHistory" class="stub-history">
+            <p class="empty-note">No saved stubs yet. Click <strong>Save stub to history</strong> after generating to start accumulating YTD.</p>
           </div>
         </fieldset>
 
-        <div class="actions actions--primary">
-          <button type="submit" class="primary">Generate stub</button>
-          <button type="button" class="ghost" id="printStubBtn">Print stub</button>
-        </div>
+        <!-- Data backup -->
+        <fieldset id="fsData">
+          <legend>Data backup</legend>
+          <p class="field-note" style="margin-bottom: 0.6rem;">
+            Download a JSON snapshot of all your companies, employees, and saved stubs.
+            Import to restore (will merge by ID).
+          </p>
+          <div class="actions">
+            <button type="button" class="ghost" id="exportBtn">Export JSON</button>
+            <button type="button" class="ghost" id="importBtn">Import JSON</button>
+            <input id="importFileInput" type="file" accept=".json,application/json" hidden />
+          </div>
+        </fieldset>
 
       </form>
     </section>
@@ -262,7 +290,7 @@
         <div class="stub-wm stub-wm--1" aria-hidden="true">NON-NEGOTIABLE</div>
         <div class="stub-wm stub-wm--2" aria-hidden="true">NON-NEGOTIABLE</div>
 
-        <!-- Top band: company (left) | identifiers (center) -->
+        <!-- Top band: company (left) | identifiers (right) -->
         <header class="stub-top">
           <div class="stub-top-company">
             <p class="co-name" id="stubCompanyName">COMPANY NAME</p>
