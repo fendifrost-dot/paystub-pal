@@ -258,17 +258,16 @@
           <p class="field-note" style="margin-top: 0.45rem;">State tax rate is baked in per state (Illinois 4.95%).</p>
         </fieldset>
 
-        <!-- Primary actions -->
+        <!-- Primary action: Generate PDF auto-saves to history -->
         <div class="actions actions--primary">
           <button type="button" class="primary" id="generatePdfBtn">Generate PDF</button>
-          <button type="button" class="ghost" id="saveStubBtn">Save stub to history</button>
         </div>
 
         <!-- Stub history -->
         <fieldset id="fsHistory">
           <legend>Stub history <span class="legend-sub" id="historyYearLabel"></span></legend>
           <div id="stubHistory" class="stub-history">
-            <p class="empty-note">No saved stubs yet. Click <strong>Save stub to history</strong> after generating to start accumulating YTD.</p>
+            <p class="empty-note">No saved stubs yet. Each stub you generate saves automatically so the next period's YTD rolls forward.</p>
           </div>
         </fieldset>
 

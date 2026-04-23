@@ -133,8 +133,7 @@
     });
     document.getElementById("state").addEventListener("change", generateStub);
 
-    // Primary actions
-    document.getElementById("saveStubBtn").addEventListener("click", saveStubToHistory);
+    // Primary action (Generate PDF auto-saves to history too)
     document.getElementById("generatePdfBtn").addEventListener("click", generatePDF);
 
     // Data backup
@@ -333,7 +332,7 @@
     var disabled = !activeCompanyId;
     document.getElementById("saveEmployeeBtn").disabled = disabled;
     document.getElementById("newEmployeeBtn").disabled = disabled;
-    document.getElementById("saveStubBtn").disabled = disabled || !hasSelection;
+    document.getElementById("generatePdfBtn").disabled = disabled || !hasSelection;
   }
 
   function onEmployeeChange() {
@@ -929,8 +928,18 @@
         flashButton("generatePdfBtn", "Pick an employee", true);
         return;
       }
+      if (!valueOf("payDate")) {
+        flashButton("generatePdfBtn", "Pay date required", true);
+        return;
+      }
 
-      // Ensure preview is up to date with current form state.
+      // Auto-save to history so the next stub's YTD rolls forward correctly.
+      // Idempotent per (company, employee, payDate) — regenerating the same
+      // pay date updates the stored record rather than duplicating it.
+      saveStubToHistory();
+
+      // saveStubToHistory() already called generateStub(), so the preview is
+      // current and the rollup includes the just-saved stub.
       generateStub();
 
       var stubEl = document.querySelector(".stub-paper");
