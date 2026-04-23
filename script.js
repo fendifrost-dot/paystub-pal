@@ -154,20 +154,69 @@
   // ===========================================================================
   // Period auto-calc
   // ===========================================================================
+  function parseInputDate(iso) {
+    if (!iso) return null;
+    var d = new Date(iso + "T00:00:00");
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function addDays(date, delta) {
+    var out = new Date(date.getTime());
+    out.setDate(out.getDate() + delta);
+    return out;
+  }
+
+  // Stub with the greatest periodEnd (same company/employee/tax year) where
+  // periodEnd is strictly before the current pay date — so we can chain the
+  // next period to run from prior.periodEnd + 1 day without leaving gaps.
+  function findPriorStubForChaining(companyId, employeeId, currentPayDateStr) {
+    if (!companyId || !employeeId || !currentPayDateStr) return null;
+    var year = yearFromInputDate(currentPayDateStr);
+    if (!year) return null;
+    var best = null;
+    var bestEnd = "";
+    stubs.forEach(function (s) {
+      if (s.companyId !== companyId || s.employeeId !== employeeId) return;
+      if (yearFromInputDate(s.payDate) !== year) return;
+      if (!s.periodEnd) return;
+      if (s.periodEnd >= currentPayDateStr) return;
+      if (!best || s.periodEnd > bestEnd) {
+        best = s;
+        bestEnd = s.periodEnd;
+      }
+    });
+    return best;
+  }
+
   function autoCalcPeriod() {
     var raw  = valueOf("payDate");
     var freq = valueOf("payFrequency") || "biweekly";
     if (!raw) return;
 
-    var payDate = new Date(raw + "T00:00:00");
-    if (isNaN(payDate.getTime())) return;
-
-    var end = new Date(payDate);
-    end.setDate(end.getDate() - 2);
+    var payDate = parseInputDate(raw);
+    if (!payDate) return;
 
     var span = FREQUENCY_DAYS[freq] || FREQUENCY_DAYS.biweekly;
-    var start = new Date(end);
-    start.setDate(start.getDate() - (span - 1));
+    var priorStub = findPriorStubForChaining(activeCompanyId, employeeSelect.value, raw);
+
+    var start;
+    var end;
+
+    if (priorStub && priorStub.periodEnd) {
+      var priorEnd = parseInputDate(priorStub.periodEnd);
+      if (priorEnd) {
+        start = addDays(priorEnd, 1);
+        end   = addDays(start, span - 1);
+      }
+    }
+
+    if (!start || !end) {
+      // No prior stub: fall back to independent calc (payDate minus 2-day lag).
+      end = new Date(payDate);
+      end.setDate(end.getDate() - 2);
+      start = new Date(end);
+      start.setDate(start.getDate() - (span - 1));
+    }
 
     document.getElementById("periodStart").value = toInputDate(start);
     document.getElementById("periodEnd").value   = toInputDate(end);
