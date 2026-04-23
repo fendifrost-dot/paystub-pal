@@ -238,6 +238,18 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+button.is-success {
+  background: #0f7a3a !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+button.is-error {
+  background: #a81f1f !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
 /* =============================================================================
    Preview panel
    ============================================================================= */

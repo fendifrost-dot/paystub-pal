@@ -9,9 +9,9 @@
     employees: "paystub.employees"
   };
 
+  // State tax rates are baked in. Only Illinois for now — add more here as we expand.
   var STATE_CONFIG = {
-    IL: { label: "Illinois", code: "IL", defaultStateTaxRate: 4.95 },
-    TX: { label: "Texas",    code: "TX", defaultStateTaxRate: 0.0  }
+    IL: { label: "Illinois", code: "IL", defaultStateTaxRate: 4.95 }
   };
 
   var SOCIAL_SECURITY_RATE = 6.2;
@@ -140,7 +140,7 @@
   function seedDefaultOptions() {
     if (!companies.length) {
       companies.push({
-        id: crypto.randomUUID(),
+        id: genId(),
         name: "Sample Company LLC",
         address1: "123 Main St",
         address2: "Chicago, IL 60601",
@@ -175,20 +175,30 @@
   }
 
   function saveCompany() {
-    var company = {
-      id: companySelect.value || crypto.randomUUID(),
-      name:     valueOf("companyName"),
-      address1: valueOf("companyAddress1"),
-      address2: valueOf("companyAddress2"),
-      ein:      valueOf("companyEin"),
-      state:    valueOf("state")
-    };
-    var idx = companies.findIndex(function (c) { return c.id === company.id; });
-    if (idx >= 0) companies[idx] = company; else companies.push(company);
-    saveData(STORAGE_KEYS.companies, companies);
-    hydrateSelects();
-    companySelect.value = company.id;
-    generateStub();
+    try {
+      if (!valueOf("companyName")) {
+        flashButton("saveCompanyBtn", "Name required", true);
+        return;
+      }
+      var company = {
+        id: companySelect.value || genId(),
+        name:     valueOf("companyName"),
+        address1: valueOf("companyAddress1"),
+        address2: valueOf("companyAddress2"),
+        ein:      valueOf("companyEin"),
+        state:    valueOf("state")
+      };
+      var idx = companies.findIndex(function (c) { return c.id === company.id; });
+      if (idx >= 0) companies[idx] = company; else companies.push(company);
+      saveData(STORAGE_KEYS.companies, companies);
+      hydrateSelects();
+      companySelect.value = company.id;
+      generateStub();
+      flashButton("saveCompanyBtn", "Saved \u2713", false);
+    } catch (err) {
+      console.error("saveCompany failed:", err);
+      flashButton("saveCompanyBtn", "Save failed", true);
+    }
   }
 
   function clearCompanyForm() {
@@ -209,28 +219,38 @@
   }
 
   function saveEmployee() {
-    var employee = {
-      id: employeeSelect.value || crypto.randomUUID(),
-      name:                   valueOf("employeeName"),
-      employeeId:             valueOf("employeeId"),
-      employeeAddress1:       valueOf("employeeAddress1"),
-      employeeAddress2:       valueOf("employeeAddress2"),
-      ssnLast4:               valueOf("ssnLast4"),
-      federalFilingStatus:    valueOf("federalFilingStatus"),
-      federalAllowances:      numberOf("federalAllowances"),
-      stateExemptions:        numberOf("stateExemptions"),
-      isFederalExempt:        valueOf("isFederalExempt"),
-      isStateExempt:          valueOf("isStateExempt"),
-      isSocialSecurityExempt: valueOf("isSocialSecurityExempt"),
-      isMedicareExempt:       valueOf("isMedicareExempt"),
-      additionalFederal:      numberOf("additionalFederal")
-    };
-    var idx = employees.findIndex(function (e) { return e.id === employee.id; });
-    if (idx >= 0) employees[idx] = employee; else employees.push(employee);
-    saveData(STORAGE_KEYS.employees, employees);
-    renderSelect(employeeSelect, employees, "Select employee");
-    employeeSelect.value = employee.id;
-    generateStub();
+    try {
+      if (!valueOf("employeeName")) {
+        flashButton("saveEmployeeBtn", "Name required", true);
+        return;
+      }
+      var employee = {
+        id: employeeSelect.value || genId(),
+        name:                   valueOf("employeeName"),
+        employeeId:             valueOf("employeeId"),
+        employeeAddress1:       valueOf("employeeAddress1"),
+        employeeAddress2:       valueOf("employeeAddress2"),
+        ssnLast4:               valueOf("ssnLast4"),
+        federalFilingStatus:    valueOf("federalFilingStatus"),
+        federalAllowances:      numberOf("federalAllowances"),
+        stateExemptions:        numberOf("stateExemptions"),
+        isFederalExempt:        valueOf("isFederalExempt"),
+        isStateExempt:          valueOf("isStateExempt"),
+        isSocialSecurityExempt: valueOf("isSocialSecurityExempt"),
+        isMedicareExempt:       valueOf("isMedicareExempt"),
+        additionalFederal:      numberOf("additionalFederal")
+      };
+      var idx = employees.findIndex(function (e) { return e.id === employee.id; });
+      if (idx >= 0) employees[idx] = employee; else employees.push(employee);
+      saveData(STORAGE_KEYS.employees, employees);
+      renderSelect(employeeSelect, employees, "Select employee");
+      employeeSelect.value = employee.id;
+      generateStub();
+      flashButton("saveEmployeeBtn", "Saved \u2713", false);
+    } catch (err) {
+      console.error("saveEmployee failed:", err);
+      flashButton("saveEmployeeBtn", "Save failed", true);
+    }
   }
 
   function clearEmployeeForm() {
@@ -240,7 +260,7 @@
       "employeeAddress1", "employeeAddress2", "ssnLast4",
       "hourlyRate", "regularHours", "overtimeHours",
       "pretaxDeductions", "postTaxDeductions",
-      "stateTaxRateOverride", "additionalFederal",
+      "additionalFederal",
       "ytdRegularPay", "ytdRegularHours",
       "ytdOvertimePay", "ytdOvertimeHours",
       "ytdFederal", "ytdState",
@@ -293,7 +313,6 @@
     var pretax         = numberOf("pretaxDeductions");
     var posttax        = numberOf("postTaxDeductions");
     var federalRate    = numberOf("federalTaxRate", 12);
-    var stateOverride  = optionalNumber("stateTaxRateOverride");
     var additionalFed  = numberOf("additionalFederal");
     var fedAllow       = numberOf("federalAllowances");
     var stateExempt    = numberOf("stateExemptions");
@@ -315,7 +334,7 @@
     var fedTaxable     = Math.max(0, taxableWages - fedAdj);
     var federalWH      = fedExempt ? 0 : percentage(fedTaxable, federalRate) + additionalFed;
 
-    var stateRate      = (stateOverride !== null) ? stateOverride : stateCfg.defaultStateTaxRate;
+    var stateRate      = stateCfg.defaultStateTaxRate;
     var stTaxable      = Math.max(0, taxableWages - stateAdj);
     var stateWH        = stExempt ? 0 : percentage(stTaxable, stateRate);
     var socSec         = ssExempt ? 0 : percentage(taxableWages, SOCIAL_SECURITY_RATE);
@@ -487,6 +506,34 @@
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  // Safe unique ID. crypto.randomUUID() requires a secure context (HTTPS or
+  // localhost) AND a recent-enough browser — on older Safari or plain HTTP it
+  // throws and silently breaks Save. This fallback keeps Save working anywhere.
+  function genId() {
+    try {
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+      }
+    } catch (_) { /* fall through to fallback */ }
+    return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+  }
+
+  // Brief inline feedback on a button so users know Save worked (or didn't).
+  function flashButton(id, text, isError) {
+    var btn = document.getElementById(id);
+    if (!btn) return;
+    if (btn.dataset.flashOriginal == null) btn.dataset.flashOriginal = btn.textContent;
+    btn.textContent = text;
+    btn.classList.toggle("is-error", !!isError);
+    btn.classList.toggle("is-success", !isError);
+    clearTimeout(btn._flashTimer);
+    btn._flashTimer = setTimeout(function () {
+      btn.textContent = btn.dataset.flashOriginal;
+      btn.classList.remove("is-error", "is-success");
+    }, 1600);
+  }
+
   function toInputDate(date) {
     // Local-time YYYY-MM-DD (avoids UTC off-by-one)
     var y = date.getFullYear();
