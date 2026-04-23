@@ -1,289 +1,682 @@
+/* =============================================================================
+   PayStub Pal — Generic Earnings Statement
+   Authentic payroll-stub typography. Arial / Helvetica, 7.5pt base.
+   ============================================================================= */
+
 :root {
-  --bg: #f3f4f7;
-  --panel: #ffffff;
-  --line: #d6d8de;
-  --text: #1f2329;
-  --muted: #5e6572;
-  --accent: #1e5bd7;
-  --accent-dark: #0f46b4;
+  --bg:           #eef0f3;
+  --panel:        #ffffff;
+  --ink:          #0b0d10;
+  --muted:        #6b7280;
+  --muted-2:      #9aa0aa;
+  --line:         #e2e4e8;
+  --line-strong:  #c9ccd2;
+  --hairline:     #edeff2;
+  --accent:       #0b0d10;
+  --accent-ring:  rgba(11, 13, 16, 0.10);
+  --radius:       8px;
+  --radius-sm:    5px;
+  --shadow-xs:    0 1px 2px rgba(10, 12, 16, 0.04);
+  --shadow-paper: 0 20px 48px rgba(10, 12, 16, 0.10), 0 2px 6px rgba(10, 12, 16, 0.05);
+
+  /* Stub palette (neutral, document-like) */
+  --doc-ink:        #0a0c0f;
+  --doc-soft:       #2b2f36;
+  --doc-muted:      #555a63;
+  --doc-line:       #b8bbc1;
+  --doc-line-thin:  #d4d7dc;
+  --doc-wm:         #c9ccd2;  /* Watermark color. Not too light - needs to print. */
+
+  --font-ui:  'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-doc: Arial, Helvetica, 'Liberation Sans', 'Nimbus Sans', sans-serif;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
 
 body {
   margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
   background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-h1,
-h2,
-p {
-  margin: 0;
-}
+h1, h2, h3, p, dl, dd { margin: 0; }
+
+/* =============================================================================
+   App shell
+   ============================================================================= */
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(360px, 520px) 1fr;
-  gap: 1.2rem;
-  padding: 1rem;
+  grid-template-columns: minmax(380px, 500px) 1fr;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  max-width: 1680px;
+  margin: 0 auto;
 }
 
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(18, 22, 31, 0.06);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
 }
+
+/* =============================================================================
+   Controls
+   ============================================================================= */
 
 .controls {
-  padding: 1rem;
-  max-height: calc(100vh - 2rem);
+  padding: 1.35rem 1.35rem 1.5rem;
+  max-height: calc(100vh - 2.5rem);
   overflow: auto;
+  position: sticky;
+  top: 1.25rem;
+  align-self: start;
 }
 
-.intro {
+.controls-head .eyebrow {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.controls-head h1 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.controls-head .intro {
   margin-top: 0.4rem;
-  margin-bottom: 1rem;
-  font-size: 0.92rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
 }
 
 fieldset {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.9rem;
-  margin: 0 0 1rem;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  padding: 1.1rem 0 0.15rem;
+  margin: 1.1rem 0 0;
+}
+
+fieldset:first-of-type {
+  border-top: 0;
+  margin-top: 1.3rem;
+  padding-top: 0.2rem;
 }
 
 legend {
-  font-weight: 700;
-  font-size: 0.95rem;
-  padding: 0 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0;
+  margin-bottom: 0.65rem;
 }
 
 label {
   display: flex;
   flex-direction: column;
-  gap: 0.28rem;
-  font-size: 0.82rem;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 
-input,
-select,
-button {
-  font: inherit;
+input, select, button, textarea {
+  font-family: inherit;
+  color: inherit;
 }
 
-input,
-select {
-  padding: 0.5rem 0.6rem;
-  border: 1px solid #c6cad4;
-  border-radius: 6px;
-  color: var(--text);
+input, select {
+  font-size: 0.88rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
   background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
-input:focus,
-select:focus {
-  outline: 2px solid rgba(30, 91, 215, 0.2);
-  border-color: var(--accent);
+select {
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 1.8rem;
 }
 
-.grid {
-  display: grid;
-  gap: 0.7rem;
+input[readonly] {
+  background: #f5f6f8;
+  color: var(--doc-muted);
+  cursor: not-allowed;
+  border-style: dashed;
 }
 
-.two-col {
-  grid-template-columns: repeat(2, 1fr);
+input::placeholder { color: var(--muted-2); }
+input:hover, select:hover { border-color: #b0b5bd; }
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
-.tax-grid {
-  margin-top: 0.9rem;
+input[type="number"] { font-variant-numeric: tabular-nums; }
+
+.field-note {
+  margin: 0.45rem 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.4;
 }
+
+.grid           { display: grid; gap: 0.65rem; }
+.grid.two-col   { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.three-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid.four-col  { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
-  margin-top: 0.8rem;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.actions--primary {
+  margin-top: 1.35rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline);
 }
 
 button {
   border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 0.52rem 0.78rem;
+  border-radius: var(--radius-sm);
+  padding: 0.58rem 0.95rem;
+  font-size: 0.85rem;
+  font-weight: 500;
   cursor: pointer;
-  font-weight: 600;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.05s;
 }
 
-button.primary,
-button[type="submit"] {
-  background: var(--accent);
+button.primary, button[type="submit"] {
+  background: var(--ink);
   color: #fff;
 }
-
-button.primary:hover,
-button[type="submit"]:hover {
-  background: var(--accent-dark);
-}
+button.primary:hover, button[type="submit"]:hover { background: #000; }
 
 button.ghost {
-  border-color: #b9bfca;
   background: #fff;
-  color: #263246;
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+button.ghost:hover { border-color: var(--ink); }
+
+button:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
 }
 
+/* =============================================================================
+   Preview panel
+   ============================================================================= */
+
 .preview {
-  padding: 0.75rem;
+  padding: 1.25rem;
+  display: flex;
+  justify-content: center;
   overflow: auto;
 }
 
+/* =============================================================================
+   Stub paper (authentic payroll stub look)
+   ============================================================================= */
+
 .stub-paper {
+  position: relative;
   width: 8.5in;
   min-height: 11in;
-  margin: 0 auto;
+  padding: 0.5in 0.45in 0.35in;
   background: #fff;
-  border: 1px solid #bbbfc8;
-  padding: 0.5in;
-  color: #1b1d21;
+  color: var(--doc-ink);
+
+  /* Arial at 7.5pt base — matches real payroll output. */
+  font-family: var(--font-doc);
+  font-size: 7.5pt;
+  line-height: 1.25;
+
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  box-shadow: var(--shadow-paper);
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
 }
 
-.stub-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
-  border-bottom: 1px solid #aeb4c0;
-  padding-bottom: 0.35in;
+.stub-paper p { margin: 0; padding: 0; }
+
+/* ---- Watermarks (diagonal NON-NEGOTIABLE) -------------------------------- */
+
+.stub-wm {
+  position: absolute;
+  font-family: 'Times New Roman', Times, serif;
+  font-weight: 400;
+  font-size: 38pt;
+  letter-spacing: 0.02em;
+  color: var(--doc-wm);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+  transform: rotate(-30deg);
+  opacity: 0.65;
 }
 
-.stub-company {
+/* Upper-right */
+.stub-wm--1 {
+  top: 1.4in;
+  right: -0.1in;
+}
+
+/* Middle-left */
+.stub-wm--2 {
+  top: 2.8in;
+  left: 0.4in;
+}
+
+.stub-paper > *:not(.stub-wm) {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- Top band ------------------------------------------------------------ */
+
+.stub-top {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 0.3in;
+  padding: 0 0 0.25in;
+}
+
+.stub-top-company .co-name {
+  font-size: 8.5pt;
   font-weight: 700;
-  font-size: 1rem;
   letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--doc-ink);
 }
 
-.stub-header p {
-  font-size: 0.78rem;
+.stub-top-company .co-addr {
+  font-size: 7.5pt;
+  color: var(--doc-ink);
+  text-transform: uppercase;
   line-height: 1.3;
 }
 
-.stub-meta {
-  text-align: right;
+.stub-top-ids {
+  text-align: left;
+  padding-left: 0.2in;
+  font-size: 7.5pt;
+  line-height: 1.35;
 }
 
-.stub-mark {
-  margin-top: 0.22in;
-  color: #7f8693;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+.stub-top-ids .id-line {
+  color: var(--doc-ink);
+  letter-spacing: 0.02em;
 }
 
-.stub-grid {
-  display: grid;
-  grid-template-columns: 0.95fr 1.45fr;
-  gap: 0.18in;
-  margin-top: 0.28in;
+/* ---- Employee mailing block ---------------------------------------------- */
+
+.stub-ee-mail {
+  padding: 0.35in 0 0.35in 0.25in;
+  min-height: 1.4in;
 }
 
-.stub-box {
-  border: 1px solid #aeb4c0;
-  padding: 0.11in;
-}
-
-.stub-box h2 {
-  font-size: 0.73rem;
-  margin-bottom: 0.12in;
+.stub-ee-mail .ee-upper {
+  font-size: 8.5pt;
+  font-weight: 400;
   text-transform: uppercase;
-  border-bottom: 1px solid #d0d4dc;
-  padding-bottom: 0.06in;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  color: var(--doc-ink);
 }
 
-.stub-box p {
-  font-size: 0.72rem;
-  line-height: 1.28;
-  margin: 0 0 0.04in;
+.stub-ee-mail .ee-upper-addr {
+  font-size: 8pt;
+  text-transform: uppercase;
+  line-height: 1.3;
+  color: var(--doc-ink);
 }
 
-.stub-table {
+/* ---- Main body: two columns --------------------------------------------- */
+
+.stub-body {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 0;
+  padding-top: 0.1in;
+  border-top: 0.5pt solid var(--doc-line);
+}
+
+.stub-left {
+  padding: 0.12in 0.2in 0.15in 0;
+  border-right: 0.5pt solid var(--doc-line);
+}
+
+.stub-right {
+  padding: 0.12in 0 0.15in 0.2in;
+}
+
+/* ---- Section labels ------------------------------------------------------ */
+
+.stub-label {
+  font-size: 7.5pt;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--doc-ink);
+  margin-bottom: 6pt;
+}
+
+.stub-label-split {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 14pt;
+  justify-content: start;
+  align-items: baseline;
+}
+
+.stub-basis {
+  font-size: 7pt;
+  font-weight: 400;
+  color: var(--doc-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.italic { font-style: italic; }
+
+/* ---- Info blocks (left column) ------------------------------------------ */
+
+.stub-info {
+  font-size: 7.5pt;
+  line-height: 1.45;
+  color: var(--doc-ink);
+  margin-bottom: 10pt;
+}
+
+.stub-info p + p { margin-top: 1pt; }
+
+.stub-info .info-name {
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.stub-info .info-tiny {
+  font-size: 7pt;
+  color: var(--doc-muted);
+  margin-top: 4pt;
+}
+
+.stub-info--tight {
+  border-top: 0.5pt solid var(--doc-line);
+  padding-top: 6pt;
+  margin-top: 4pt;
+}
+
+.info-row-ssn {
+  display: flex;
+  justify-content: space-between;
+  gap: 10pt;
+  flex-wrap: wrap;
+}
+
+.info-row-ssn .info-ssn {
+  white-space: nowrap;
+  font-size: 7.5pt;
+}
+
+.info-row-ssn .info-ssn strong { font-weight: 700; }
+
+.stub-info strong { font-weight: 700; }
+
+/* ---- Data tables --------------------------------------------------------- */
+
+.data-table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 0.08in;
+  font-size: 7.5pt;
+  margin-bottom: 10pt;
 }
 
-.stub-table th,
-.stub-table td {
-  border: 1px solid #d0d4dc;
-  font-size: 0.69rem;
-  padding: 0.04in 0.05in;
-  text-align: right;
-}
-
-.stub-table th:first-child,
-.stub-table td:first-child {
+.data-table thead th {
+  font-weight: 400;
+  font-size: 7pt;
+  letter-spacing: 0.03em;
+  color: var(--doc-ink);
   text-align: left;
+  padding: 3pt 5pt 3pt 0;
+  border-bottom: 0.5pt solid var(--doc-line);
+  vertical-align: bottom;
 }
 
-.stub-footer {
-  margin-top: 0.28in;
-  border-top: 1px solid #aeb4c0;
-  padding-top: 0.12in;
+.data-table tbody td {
+  padding: 2.5pt 5pt 2.5pt 0;
+  color: var(--doc-ink);
+  vertical-align: top;
+}
+
+.data-table tbody tr + tr td { padding-top: 2pt; }
+
+.data-table th.num,
+.data-table td.num {
+  text-align: right;
+  padding-right: 0;
+  padding-left: 6pt;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table .foot-row td {
+  padding: 4pt 5pt 2pt 0;
+  border-top: 0.5pt solid var(--doc-line-thin);
+}
+
+.data-table .foot-row:first-child td {
+  border-top: 0.5pt solid var(--doc-line);
+  padding-top: 5pt;
+}
+
+.data-table .foot-row td.num { padding-left: 6pt; }
+
+.data-table .foot-row--dim td {
+  color: var(--doc-ink);
+  font-size: 7pt;
+  border-top: none;
+}
+
+.data-table .foot-row--total td {
+  border-top: 0.5pt solid var(--doc-line);
+  padding-top: 6pt;
+}
+
+/* ---- NET PAY band -------------------------------------------------------- */
+
+.stub-netpay {
+  margin-top: 0.25in;
+  display: grid;
+  grid-template-columns: 1fr 1.4in 1.4in;
+  gap: 0;
+  border-top: 0.5pt solid var(--doc-line);
+  padding-top: 8pt;
+}
+
+.np-cell {
+  font-size: 8pt;
+  padding: 4pt 6pt 4pt 6pt;
+}
+
+.np-label {
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 8pt;
+  align-self: center;
+  padding-left: 0;
+}
+
+.np-val {
   display: flex;
-  justify-content: flex-end;
-  gap: 0.28in;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1pt;
+  text-align: right;
+  padding-right: 0;
 }
 
-.stub-footer p {
-  font-size: 0.8rem;
+.np-val .np-sub {
+  font-size: 6.5pt;
+  color: var(--doc-ink);
+  letter-spacing: 0.02em;
 }
+
+.np-val strong {
+  font-size: 9pt;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Footer strip -------------------------------------------------------- */
+
+.stub-foot {
+  margin-top: 0.35in;
+  padding-top: 0.08in;
+  border-top: 0.5pt solid var(--doc-line-thin);
+  font-size: 6.5pt;
+  color: var(--doc-muted);
+  letter-spacing: 0.02em;
+  text-align: left;
+  min-height: 0.2in;
+}
+
+/* =============================================================================
+   Responsive
+   ============================================================================= */
 
 @media (max-width: 1200px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
+  .app-shell { grid-template-columns: 1fr; }
   .controls {
+    position: static;
     max-height: none;
   }
-
+  .preview { padding: 0.75rem; }
   .stub-paper {
     width: 100%;
+    max-width: 8.5in;
     min-height: auto;
+    padding: 0.45in 0.4in;
+    box-shadow: var(--shadow-xs);
   }
+  .stub-wm { font-size: 32pt; }
+}
 
-  .stub-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 780px) {
+  .app-shell { padding: 0.75rem; gap: 0.75rem; }
+  .controls { padding: 1rem; }
+  .grid.two-col, .grid.three-col, .grid.four-col { grid-template-columns: 1fr; }
+  .stub-paper { padding: 0.3in; }
+  .stub-top { grid-template-columns: 1fr; gap: 0.15in; }
+  .stub-body { grid-template-columns: 1fr; }
+  .stub-left {
+    border-right: 0;
+    border-bottom: 0.5pt solid var(--doc-line);
+    padding: 0 0 0.15in;
+    margin-bottom: 0.15in;
   }
+  .stub-right { padding: 0; }
+  .stub-netpay { grid-template-columns: 1fr; gap: 4pt; }
+  .np-val { align-items: flex-start; text-align: left; }
+  .stub-wm { font-size: 28pt; }
+  .stub-wm--1 { top: 1in; right: -0.2in; }
+  .stub-wm--2 { top: 2in; left: 0.2in; }
+}
+
+/* =============================================================================
+   Print — US Letter
+   ============================================================================= */
+
+@page {
+  size: letter;
+  margin: 0.35in;
 }
 
 @media print {
-  body {
-    background: #fff;
+  html, body {
+    background: #fff !important;
+    color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
-  .controls {
-    display: none;
+  .controls, .actions, button, .field-note {
+    display: none !important;
+  }
+
+  .app-shell {
+    display: block;
+    padding: 0;
+    margin: 0;
+    max-width: none;
   }
 
   .panel.preview {
     border: 0;
-    box-shadow: none;
     padding: 0;
+    box-shadow: none;
+    background: transparent;
+    display: block;
+    overflow: visible;
   }
 
   .stub-paper {
-    border: 0;
-    margin: 0;
-    width: auto;
+    width: 100%;
+    max-width: none;
     min-height: auto;
-    padding: 0.25in;
+    margin: 0;
+    padding: 0.15in 0.2in 0.1in;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    page-break-inside: avoid;
+    font-size: 7.5pt;
   }
+
+  .stub-wm { color: var(--doc-wm); opacity: 0.7; }
+  .stub-body        { border-top-color: #000; }
+  .stub-left        { border-right-color: #000; }
+  .stub-info--tight { border-top-color: #000; }
+  .data-table thead th,
+  .data-table .foot-row td,
+  .data-table .foot-row--total td,
+  .stub-netpay,
+  .stub-foot { border-color: #000; }
 }
