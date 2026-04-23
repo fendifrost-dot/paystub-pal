@@ -486,12 +486,19 @@
 
   // ===========================================================================
   // Core calculation + render
+  // ---------------------------------------------------------------------------
+  // Pipeline: buildStubModel (pure calc) -> renderStub (DOM only) -> saveStub
+  // Every consumer (live preview, Generate PDF, save-to-history) uses the SAME
+  // model object. This guarantees preview === saved === PDF, and removes the
+  // earlier bug where a re-render after save dropped current-period dollars
+  // from YTD while keeping current-period hours.
   // ===========================================================================
-  function generateStub() {
+
+  // Pure: reads form + in-memory state, returns a model. No DOM writes.
+  function buildStubModel() {
     var stateCode = valueOf("state");
     var stateCfg  = STATE_CONFIG[stateCode] || STATE_CONFIG.IL;
 
-    // This-period inputs
     var hourlyRate     = numberOf("hourlyRate");
     var regularHours   = numberOf("regularHours");
     var overtimeHours  = numberOf("overtimeHours");
@@ -508,15 +515,13 @@
     var ssExempt  = valueOf("isSocialSecurityExempt") === "yes";
     var mcExempt  = valueOf("isMedicareExempt")       === "yes";
 
-    // Year = the payDate's calendar year; fallback to current year if payDate missing/bad.
     var payDateStr = valueOf("payDate");
     var year       = yearFromInputDate(payDateStr) || (new Date()).getFullYear();
 
-    // Roll up prior-year stubs EXCLUDING any stub that matches the current payDate.
-    // This exclusion is what fixes the post-save double-count.
+    // Rollup excludes any saved stub matching the current pay date so we can
+    // always add "this period" on top without double-counting.
     var roll = rollupYtd(activeCompanyId, employeeSelect.value, year, payDateStr);
 
-    // -- This period --
     var regularPay   = regularHours  * hourlyRate;
     var overtimeRate = hourlyRate    * otMultiplier;
     var overtimePay  = overtimeHours * overtimeRate;
@@ -530,8 +535,6 @@
     var stTaxable  = Math.max(0, taxableWages - stateAdj);
     var stateWH    = stExempt ? 0 : percentage(stTaxable, stateCfg.defaultStateTaxRate);
 
-    // Social Security with wage-base cap.
-    // YTD taxable wages for SS before this period = prior gross - prior pretax.
     var ssWageBase        = SS_WAGE_BASE_BY_YEAR[year] || SS_WAGE_BASE_FALLBACK;
     var ytdSsWagesBefore  = (roll.regularPay + roll.overtimePay) - roll.pretax;
     var ssCapRemaining    = Math.max(0, ssWageBase - Math.max(0, ytdSsWagesBefore));
@@ -544,7 +547,6 @@
     var netPay   = Math.max(0, grossPay - totalDed);
     var totalHrs = regularHours + overtimeHours;
 
-    // YTD = rollup (seed + prior saved stubs, excluding current payDate) + this period.
     var ytd = {
       regularHours:  roll.regularHours  + regularHours,
       regularPay:    roll.regularPay    + regularPay,
@@ -562,7 +564,6 @@
     ytd.grossPay   = ytd.regularPay + ytd.overtimePay;
     ytd.totalDed   = ytd.federalWH + ytd.stateWH + ytd.socSec + ytd.medicare + ytd.pretax + ytd.posttax;
 
-    // Earnings rows
     var earningsLines = [];
     if (hourlyRate > 0 || regularHours > 0 || ytd.regularPay > 0) {
       earningsLines.push({
@@ -581,9 +582,7 @@
     if (earningsLines.length === 0) {
       earningsLines.push({ desc: "Hourly", hours: 0, rate: 0, current: 0, ytdHours: 0, ytd: 0 });
     }
-    renderEarnings("earningsRows", earningsLines);
 
-    // Withholdings rows
     var fedStatusCode  = FILING_ABBREV[valueOf("federalFilingStatus")] || "S";
     var fedStatusLabel = fedStatusCode + " " + fedAllow;
     var stStatusLabel  = stExemptNum > 0 ? String(stExemptNum) : "0 0";
@@ -596,14 +595,54 @@
     ];
     if (pretax  > 0 || ytd.pretax  > 0) whLines.push({ label: "Pre-tax Deductions",  filing: "", amount: pretax,  ytd: ytd.pretax  });
     if (posttax > 0 || ytd.posttax > 0) whLines.push({ label: "Post-tax Deductions", filing: "", amount: posttax, ytd: ytd.posttax });
-    renderWithholdings("deductionRows", whLines);
 
+    return {
+      // Identity / context
+      companyId:    activeCompanyId,
+      employeeId:   employeeSelect.value,
+      payDate:      payDateStr,
+      periodStart:  valueOf("periodStart"),
+      periodEnd:    valueOf("periodEnd"),
+      payFrequency: valueOf("payFrequency"),
+      stateLabel:   stateCfg.label,
+      stateCode:    stateCfg.code,
+
+      // This-period totals (for saving + display)
+      hourlyRate: hourlyRate, otMultiplier: otMultiplier,
+      regularHours: regularHours, regularPay: regularPay,
+      overtimeHours: overtimeHours, overtimePay: overtimePay, overtimeRate: overtimeRate,
+      grossPay: grossPay, pretax: pretax, posttax: posttax,
+      federalWH: federalWH, stateWH: stateWH,
+      socSec: socSec, medicare: medicare,
+      totalDeductions: totalDed, netPay: netPay, totalHours: totalHrs,
+
+      // YTD values (rollup + this period)
+      ytd: ytd,
+
+      // Prepared rendering data
+      earningsLines: earningsLines,
+      whLines: whLines
+    };
+  }
+
+  // DOM-only: writes the model to the stub preview. No calculations.
+  function renderStub(model) {
+    renderEarnings("earningsRows", model.earningsLines);
+    renderWithholdings("deductionRows", model.whLines);
     updateStubMeta({
-      stateLabel: stateCfg.label, stateCode: stateCfg.code,
-      grossPay: grossPay, totalDeductions: totalDed, netPay: netPay,
-      totalHours: totalHrs,
-      ytdGross: ytd.grossPay, ytdTotDed: ytd.totalDed, ytdNet: ytd.netPay, ytdHours: ytd.totalHours
+      stateLabel: model.stateLabel, stateCode: model.stateCode,
+      grossPay: model.grossPay, totalDeductions: model.totalDeductions, netPay: model.netPay,
+      totalHours: model.totalHours,
+      ytdGross: model.ytd.grossPay, ytdTotDed: model.ytd.totalDed,
+      ytdNet: model.ytd.netPay, ytdHours: model.ytd.totalHours
     });
+  }
+
+  // Convenience: build + render in one call (used by live preview listeners).
+  function generateStub() {
+    var model = buildStubModel();
+    renderStub(model);
+    return model;
   }
 
   function renderEarnings(targetId, lines) {
@@ -759,84 +798,61 @@
     return acc;
   }
 
-  function saveStubToHistory() {
+  // Persists a stub from a pre-built model. NOTE: intentionally does NOT call
+  // generateStub()/renderStub() — the caller already rendered from the same
+  // model, so no re-render is needed. Re-rendering here re-invokes rollupYtd
+  // after the stub is in storage, which was the source of the pre-refactor
+  // YTD-dollars-short-one-period bug.
+  //
+  // Returns { ok, error } for structured error handling. Always calls
+  // renderStubHistory() so the history list reflects the new/updated row.
+  function saveStubToHistory(model) {
     try {
-      if (!activeCompanyId) { flashButton("saveStubBtn", "Pick a company", true); return; }
-      if (!employeeSelect.value) { flashButton("saveStubBtn", "Pick an employee", true); return; }
+      if (!model) model = buildStubModel();
+      if (!model.companyId)  return { ok: false, error: "Pick a company" };
+      if (!model.employeeId) return { ok: false, error: "Pick an employee" };
+      if (!model.payDate)    return { ok: false, error: "Pay date required" };
 
-      var stateCfg = STATE_CONFIG[valueOf("state")] || STATE_CONFIG.IL;
-      var hourlyRate    = numberOf("hourlyRate");
-      var regularHours  = numberOf("regularHours");
-      var overtimeHours = numberOf("overtimeHours");
-      var otMultiplier  = numberOf("otMultiplier", 1.5);
-      var pretax        = numberOf("pretaxDeductions");
-      var posttax       = numberOf("postTaxDeductions");
-      var federalRate   = numberOf("federalTaxRate", 12);
-      var additionalFed = numberOf("additionalFederal");
-      var fedAllow      = numberOf("federalAllowances");
-      var stExemptNum   = numberOf("stateExemptions");
-
-      var regularPay   = regularHours * hourlyRate;
-      var overtimeRate = hourlyRate * otMultiplier;
-      var overtimePay  = overtimeHours * overtimeRate;
-      var grossPay     = regularPay + overtimePay;
-      var taxableWages = Math.max(0, grossPay - pretax);
-
-      var fedExempt = valueOf("isFederalExempt")        === "yes";
-      var stExempt  = valueOf("isStateExempt")          === "yes";
-      var ssExempt  = valueOf("isSocialSecurityExempt") === "yes";
-      var mcExempt  = valueOf("isMedicareExempt")       === "yes";
-
-      var payDate = valueOf("payDate");
-      if (!payDate) { flashButton("saveStubBtn", "Pay date required", true); return; }
-
-      // Apply SS wage-base cap when persisting (same rule as generateStub).
-      var year              = yearFromInputDate(payDate) || (new Date()).getFullYear();
-      var rollForCap        = rollupYtd(activeCompanyId, employeeSelect.value, year, payDate);
-      var ssWageBase        = SS_WAGE_BASE_BY_YEAR[year] || SS_WAGE_BASE_FALLBACK;
-      var ytdSsWagesBefore  = (rollForCap.regularPay + rollForCap.overtimePay) - rollForCap.pretax;
-      var ssCapRemaining    = Math.max(0, ssWageBase - Math.max(0, ytdSsWagesBefore));
-      var ssTaxableThisRun  = Math.min(taxableWages, ssCapRemaining);
-
-      var federalWH = fedExempt ? 0 : percentage(Math.max(0, taxableWages - fedAllow * 20), federalRate) + additionalFed;
-      var stateWH   = stExempt  ? 0 : percentage(Math.max(0, taxableWages - stExemptNum * 10), stateCfg.defaultStateTaxRate);
-      var socSec    = ssExempt  ? 0 : percentage(ssTaxableThisRun, SOCIAL_SECURITY_RATE);
-      var medicare  = mcExempt  ? 0 : percentage(taxableWages, MEDICARE_RATE);
-      var totalDed  = federalWH + stateWH + socSec + medicare + pretax + posttax;
-      var netPay    = Math.max(0, grossPay - totalDed);
-
-      // Idempotent: same company+employee+payDate replaces prior record.
+      // Idempotent per (company, employee, payDate)
       var existingIdx = stubs.findIndex(function (s) {
-        return s.companyId === activeCompanyId &&
-               s.employeeId === employeeSelect.value &&
-               s.payDate === payDate;
+        return s.companyId  === model.companyId &&
+               s.employeeId === model.employeeId &&
+               s.payDate    === model.payDate;
       });
 
       var stub = {
         id:           existingIdx >= 0 ? stubs[existingIdx].id : genId(),
-        companyId:    activeCompanyId,
-        employeeId:   employeeSelect.value,
-        payDate:      payDate,
-        periodStart:  valueOf("periodStart"),
-        periodEnd:    valueOf("periodEnd"),
-        payFrequency: valueOf("payFrequency"),
-        hourlyRate: hourlyRate, otMultiplier: otMultiplier,
-        regularHours: regularHours, regularPay: regularPay,
-        overtimeHours: overtimeHours, overtimePay: overtimePay,
-        grossPay: grossPay, pretax: pretax, posttax: posttax,
-        federalWH: federalWH, stateWH: stateWH, socSec: socSec, medicare: medicare,
-        totalDeductions: totalDed, netPay: netPay,
-        savedAt: new Date().toISOString()
+        companyId:    model.companyId,
+        employeeId:   model.employeeId,
+        payDate:      model.payDate,
+        periodStart:  model.periodStart,
+        periodEnd:    model.periodEnd,
+        payFrequency: model.payFrequency,
+        hourlyRate:   model.hourlyRate,
+        otMultiplier: model.otMultiplier,
+        regularHours: model.regularHours,
+        regularPay:   model.regularPay,
+        overtimeHours: model.overtimeHours,
+        overtimePay:  model.overtimePay,
+        grossPay:     model.grossPay,
+        pretax:       model.pretax,
+        posttax:      model.posttax,
+        federalWH:    model.federalWH,
+        stateWH:      model.stateWH,
+        socSec:       model.socSec,
+        medicare:     model.medicare,
+        totalDeductions: model.totalDeductions,
+        netPay:       model.netPay,
+        savedAt:      new Date().toISOString()
       };
 
       if (existingIdx >= 0) stubs[existingIdx] = stub; else stubs.push(stub);
       saveData(STORAGE_KEYS.stubs, stubs);
       renderStubHistory();
-      generateStub();
-      flashButton("saveStubBtn", existingIdx >= 0 ? "Updated \u2713" : "Saved \u2713", false);
+      return { ok: true, stub: stub };
     } catch (err) {
       console.error("saveStubToHistory failed:", err);
-      flashButton("saveStubBtn", "Save failed", true);
+      return { ok: false, error: "Save failed" };
     }
   }
 
@@ -914,42 +930,40 @@
   // stub-paper element directly to PDF at US-Letter dimensions, then triggers
   // a download named by employee + pay date. Unlike window.print(), this
   // bypasses Chrome's auto-added page header/footer entirely.
+  // Single computation pass. Build the model once, render the DOM from it,
+  // persist the stub from the SAME model, then capture the DOM to PDF. There
+  // is no second generateStub() call after save — which is what used to cause
+  // the YTD dollar fields to drop a period while YTD hours stayed correct.
   function generatePDF() {
     try {
       if (typeof html2pdf === "undefined") {
         flashButton("generatePdfBtn", "PDF library not ready", true);
         return;
       }
-      if (!activeCompanyId) {
-        flashButton("generatePdfBtn", "Pick a company", true);
-        return;
-      }
-      if (!employeeSelect.value) {
-        flashButton("generatePdfBtn", "Pick an employee", true);
-        return;
-      }
-      if (!valueOf("payDate")) {
-        flashButton("generatePdfBtn", "Pay date required", true);
+
+      var model = buildStubModel();
+      if (!model.companyId)  { flashButton("generatePdfBtn", "Pick a company", true);   return; }
+      if (!model.employeeId) { flashButton("generatePdfBtn", "Pick an employee", true); return; }
+      if (!model.payDate)    { flashButton("generatePdfBtn", "Pay date required", true); return; }
+
+      // 1. Render the preview from the model (YTD reflects this check).
+      renderStub(model);
+
+      // 2. Persist the same model to history. No re-render; the DOM and the
+      //    saved stub agree by construction.
+      var saveResult = saveStubToHistory(model);
+      if (!saveResult.ok) {
+        flashButton("generatePdfBtn", saveResult.error || "Save failed", true);
         return;
       }
 
-      // Auto-save to history so the next stub's YTD rolls forward correctly.
-      // Idempotent per (company, employee, payDate) — regenerating the same
-      // pay date updates the stored record rather than duplicating it.
-      saveStubToHistory();
-
-      // saveStubToHistory() already called generateStub(), so the preview is
-      // current and the rollup includes the just-saved stub.
-      generateStub();
-
+      // 3. Capture the preview to PDF. By now the DOM is final — no further
+      //    state changes before html2canvas reads it.
       var stubEl = document.querySelector(".stub-paper");
       if (!stubEl) {
         flashButton("generatePdfBtn", "Stub not found", true);
         return;
       }
-
-      // Strip screen-only styling (shadow, border, rounded corners) during render
-      // so the output looks like a clean document page.
       stubEl.classList.add("pdf-rendering");
 
       var emp = getActiveEmployee();
@@ -957,8 +971,7 @@
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "");
-      var payDate = valueOf("payDate") || toInputDate(new Date());
-      var filename = "paystub-" + safeName + "-" + payDate + ".pdf";
+      var filename = "paystub-" + safeName + "-" + model.payDate + ".pdf";
 
       var opt = {
         margin:      [0.25, 0.25, 0.25, 0.25],
