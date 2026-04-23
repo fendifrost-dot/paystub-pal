@@ -147,35 +147,36 @@
             <summary>Starting YTD seed (optional, mid-year hires only)</summary>
             <p class="field-note">
               Only needed when onboarding someone who has already been paid for part of this year.
-              Normal YTD auto-rolls up from stubs you save to history below.
+              <strong>Enter just the hours</strong> and everything else auto-derives from the employee's hourly rate and tax profile.
+              Override any individual field only if the prior employer used different rates.
             </p>
             <div class="grid two-col">
               <label>Seed YTD hours
-                <input id="seedYtdHours" type="number" min="0" step="0.0001" />
+                <input id="seedYtdHours" type="number" min="0" step="0.0001" placeholder="e.g. 240" />
               </label>
               <label>Seed YTD gross
-                <input id="seedYtdGross" type="number" min="0" step="0.01" />
+                <input id="seedYtdGross" type="number" min="0" step="0.01" placeholder="auto: hours × rate" />
               </label>
               <label>Seed YTD federal w/h
-                <input id="seedYtdFederal" type="number" min="0" step="0.01" />
+                <input id="seedYtdFederal" type="number" min="0" step="0.01" placeholder="auto: gross × fed rate" />
               </label>
               <label>Seed YTD state w/h
-                <input id="seedYtdState" type="number" min="0" step="0.01" />
+                <input id="seedYtdState" type="number" min="0" step="0.01" placeholder="auto: gross × state rate" />
               </label>
               <label>Seed YTD Social Security
-                <input id="seedYtdSocialSecurity" type="number" min="0" step="0.01" />
+                <input id="seedYtdSocialSecurity" type="number" min="0" step="0.01" placeholder="auto: gross × 6.2%" />
               </label>
               <label>Seed YTD Medicare
-                <input id="seedYtdMedicare" type="number" min="0" step="0.01" />
+                <input id="seedYtdMedicare" type="number" min="0" step="0.01" placeholder="auto: gross × 1.45%" />
               </label>
               <label>Seed YTD pre-tax
-                <input id="seedYtdPretax" type="number" min="0" step="0.01" />
+                <input id="seedYtdPretax" type="number" min="0" step="0.01" placeholder="0" />
               </label>
               <label>Seed YTD post-tax
-                <input id="seedYtdPosttax" type="number" min="0" step="0.01" />
+                <input id="seedYtdPosttax" type="number" min="0" step="0.01" placeholder="0" />
               </label>
               <label>Seed YTD net pay
-                <input id="seedYtdNet" type="number" min="0" step="0.01" placeholder="Leave blank to derive" />
+                <input id="seedYtdNet" type="number" min="0" step="0.01" placeholder="auto: gross − withholdings" />
               </label>
             </div>
           </details>

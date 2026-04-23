@@ -693,22 +693,32 @@
     var seed = (emp && emp.seedYtd) ? emp.seedYtd : {};
 
     // Seed represents prior YTD carried forward (typically a mid-year hire's
-    // previous-employer totals). We roll it into the "Hourly" row because:
-    //   1. That's where users visually expect it to land.
-    //   2. The seed UI only captures totals (hours + gross), not a regular/OT split.
-    // Users with prior OT history get a minor misattribution on the per-row
-    // breakdown, but the total hours and total gross are always correct.
-    var seedHours       = Number(seed.hours           || 0);
-    var seedGross       = Number(seed.gross           || 0);
-    var seedFederal     = Number(seed.federal         || 0);
-    var seedState       = Number(seed.state           || 0);
-    var seedSocSec      = Number(seed.socialsecurity  || 0);
-    var seedMedicare    = Number(seed.medicare        || 0);
-    var seedPretax      = Number(seed.pretax          || 0);
-    var seedPosttax     = Number(seed.posttax         || 0);
-    var seedNetProvided = seed.net != null && seed.net !== "";
-    var seedNet         = seedNetProvided
-      ? Number(seed.net)
+    // previous-employer totals). The UX optimization here: the user only has to
+    // enter ONE value — seed YTD hours — and everything else derives from the
+    // employee's current rate + tax profile. Any field they explicitly fill
+    // overrides the derived value.
+    //
+    // Precedence: explicit seed value (if entered) > derived (hours × rate × profile).
+    var rate       = numberOf("hourlyRate");
+    var fedRate    = numberOf("federalTaxRate", 12);
+    var stateCfg   = STATE_CONFIG[valueOf("state")] || STATE_CONFIG.IL;
+    var stRate     = stateCfg.defaultStateTaxRate;
+    var ssBase     = SS_WAGE_BASE_BY_YEAR[year] || SS_WAGE_BASE_FALLBACK;
+
+    var has = function (k) { return seed[k] != null && seed[k] !== ""; };
+    var vf  = function (k) { return Number(seed[k] || 0); };
+
+    var seedHours    = vf("hours");
+    var seedGross    = has("gross")          ? vf("gross")          : seedHours * rate;
+    var seedPretax   = vf("pretax");
+    var seedPosttax  = vf("posttax");
+    var seedTaxable  = Math.max(0, seedGross - seedPretax);
+    var seedFederal  = has("federal")        ? vf("federal")        : percentage(seedTaxable, fedRate);
+    var seedState    = has("state")          ? vf("state")          : percentage(seedTaxable, stRate);
+    var seedSocSec   = has("socialsecurity") ? vf("socialsecurity") : percentage(Math.min(seedTaxable, ssBase), SOCIAL_SECURITY_RATE);
+    var seedMedicare = has("medicare")       ? vf("medicare")       : percentage(seedTaxable, MEDICARE_RATE);
+    var seedNet      = has("net")
+      ? vf("net")
       : Math.max(0, seedGross - (seedFederal + seedState + seedSocSec + seedMedicare + seedPretax + seedPosttax));
 
     var acc = {
