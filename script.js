@@ -19,6 +19,16 @@
   var SOCIAL_SECURITY_RATE = 6.2;
   var MEDICARE_RATE        = 1.45;
 
+  // Social Security wage base — once YTD taxable wages hit this, SS withholding
+  // stops for the rest of the calendar year. Update as SSA announces new caps.
+  // Source: SSA annual Fact Sheet (October prior year).
+  var SS_WAGE_BASE_BY_YEAR = {
+    2024: 168600,
+    2025: 176100,
+    2026: 184500   // estimate; replace with official figure when announced
+  };
+  var SS_WAGE_BASE_FALLBACK = 184500;
+
   var FREQUENCY_DAYS = {
     weekly:      7,
     biweekly:    14,
@@ -42,7 +52,8 @@
     "seedYtdHours", "seedYtdGross",
     "seedYtdFederal", "seedYtdState",
     "seedYtdSocialSecurity", "seedYtdMedicare",
-    "seedYtdPretax", "seedYtdPosttax"
+    "seedYtdPretax", "seedYtdPosttax",
+    "seedYtdNet"
   ];
 
   // ===========================================================================
@@ -497,6 +508,15 @@
     var ssExempt  = valueOf("isSocialSecurityExempt") === "yes";
     var mcExempt  = valueOf("isMedicareExempt")       === "yes";
 
+    // Year = the payDate's calendar year; fallback to current year if payDate missing/bad.
+    var payDateStr = valueOf("payDate");
+    var year       = yearFromInputDate(payDateStr) || (new Date()).getFullYear();
+
+    // Roll up prior-year stubs EXCLUDING any stub that matches the current payDate.
+    // This exclusion is what fixes the post-save double-count.
+    var roll = rollupYtd(activeCompanyId, employeeSelect.value, year, payDateStr);
+
+    // -- This period --
     var regularPay   = regularHours  * hourlyRate;
     var overtimeRate = hourlyRate    * otMultiplier;
     var overtimePay  = overtimeHours * overtimeRate;
@@ -509,39 +529,38 @@
     var federalWH  = fedExempt ? 0 : percentage(fedTaxable, federalRate) + additionalFed;
     var stTaxable  = Math.max(0, taxableWages - stateAdj);
     var stateWH    = stExempt ? 0 : percentage(stTaxable, stateCfg.defaultStateTaxRate);
-    var socSec     = ssExempt ? 0 : percentage(taxableWages, SOCIAL_SECURITY_RATE);
-    var medicare   = mcExempt ? 0 : percentage(taxableWages, MEDICARE_RATE);
+
+    // Social Security with wage-base cap
+    // YTD taxable wages for SS before this period = prior gross - prior pretax (from the rollup).
+    var ssWageBase        = SS_WAGE_BASE_BY_YEAR[year] || SS_WAGE_BASE_FALLBACK;
+    var ytdSsWagesBefore  = (roll.regularPay + roll.overtimePay + roll.grossPayExtra) - roll.pretax;
+    var ssCapRemaining    = Math.max(0, ssWageBase - Math.max(0, ytdSsWagesBefore));
+    var ssTaxableThisRun  = Math.min(taxableWages, ssCapRemaining);
+    var socSec            = ssExempt ? 0 : percentage(ssTaxableThisRun, SOCIAL_SECURITY_RATE);
+
+    var medicare  = mcExempt ? 0 : percentage(taxableWages, MEDICARE_RATE);
 
     var totalDed = federalWH + stateWH + socSec + medicare + pretax + posttax;
     var netPay   = Math.max(0, grossPay - totalDed);
     var totalHrs = regularHours + overtimeHours;
 
-    // YTD = starting seed + sum of prior-saved stubs this tax year + this stub
-    var year = yearFromInputDate(valueOf("payDate"));
-    var roll = rollupYtd(activeCompanyId, employeeSelect.value, year);
-    var current = {
-      regularHours: regularHours, regularPay: regularPay,
-      overtimeHours: overtimeHours, overtimePay: overtimePay,
-      federalWH: federalWH, stateWH: stateWH, socSec: socSec,
-      medicare: medicare, pretax: pretax, posttax: posttax,
-      grossPay: grossPay, netPay: netPay
-    };
-
+    // -- YTD (rollup + this period). Rollup already excludes any saved stub for
+    //    the current payDate, so no double-count even after Save. --
     var ytd = {
-      regularHours: roll.regularHours + current.regularHours,
-      regularPay:   roll.regularPay   + current.regularPay,
-      overtimeHours: roll.overtimeHours + current.overtimeHours,
-      overtimePay:  roll.overtimePay  + current.overtimePay,
-      federalWH:    roll.federalWH    + current.federalWH,
-      stateWH:      roll.stateWH      + current.stateWH,
-      socSec:       roll.socSec       + current.socSec,
-      medicare:     roll.medicare     + current.medicare,
-      pretax:       roll.pretax       + current.pretax,
-      posttax:      roll.posttax      + current.posttax,
-      grossPay:     roll.grossPay     + current.grossPay,
-      netPay:       roll.netPay       + current.netPay
+      regularHours:  roll.regularHours  + regularHours,
+      regularPay:    roll.regularPay    + regularPay,
+      overtimeHours: roll.overtimeHours + overtimeHours,
+      overtimePay:   roll.overtimePay   + overtimePay,
+      federalWH:     roll.federalWH     + federalWH,
+      stateWH:       roll.stateWH       + stateWH,
+      socSec:        roll.socSec        + socSec,
+      medicare:      roll.medicare      + medicare,
+      pretax:        roll.pretax        + pretax,
+      posttax:       roll.posttax       + posttax,
+      netPay:        roll.netPay        + netPay
     };
-    ytd.totalHours = ytd.regularHours + ytd.overtimeHours;
+    ytd.totalHours = ytd.regularHours + ytd.overtimeHours + roll.totalHoursExtra;
+    ytd.grossPay   = ytd.regularPay + ytd.overtimePay + roll.grossPayExtra;
     ytd.totalDed   = ytd.federalWH + ytd.stateWH + ytd.socSec + ytd.medicare + ytd.pretax + ytd.posttax;
 
     // Earnings rows
@@ -665,30 +684,57 @@
   // ===========================================================================
   // Stub history + YTD rollup
   // ===========================================================================
-  function rollupYtd(companyId, employeeId, year) {
+  // Sum YTD contributions from seed + all saved stubs for (company, employee, year),
+  // EXCLUDING any stub whose payDate matches `excludePayDate`. This exclusion fixes
+  // a double-count that occurred after saving: the saved stub landed in history,
+  // then generateStub() added it AGAIN via the current-period fields. By excluding
+  // the matching payDate here, generateStub can safely always add `current` on top.
+  function rollupYtd(companyId, employeeId, year, excludePayDate) {
     var emp = employees.find(function (e) { return e.id === employeeId; });
     var seed = (emp && emp.seedYtd) ? emp.seedYtd : {};
-    // Seed uses lowercased keys: hours, gross, federal, state, socialsecurity, medicare, pretax, posttax
+
+    // Seed contributes to TOTALS only (grossPay, totalHours via per-row aggregate,
+    // each withholding, netPay). It does NOT back-fill per-row regular/OT breakdown
+    // because we can't reliably split prior-employer history into regular vs OT.
+    // Per-row YTD (Hourly / Overtime) reflects only this year's saved stubs.
+    var seedHours       = Number(seed.hours           || 0);
+    var seedGross       = Number(seed.gross           || 0);
+    var seedFederal     = Number(seed.federal         || 0);
+    var seedState       = Number(seed.state           || 0);
+    var seedSocSec      = Number(seed.socialsecurity  || 0);
+    var seedMedicare    = Number(seed.medicare        || 0);
+    var seedPretax      = Number(seed.pretax          || 0);
+    var seedPosttax     = Number(seed.posttax         || 0);
+    var seedNetProvided = seed.net != null && seed.net !== "";
+    var seedNet         = seedNetProvided
+      ? Number(seed.net)
+      : Math.max(0, seedGross - (seedFederal + seedState + seedSocSec + seedMedicare + seedPretax + seedPosttax));
+
     var acc = {
-      regularHours: Number(seed.hours || 0),
-      regularPay:   Number(seed.gross || 0),
-      overtimeHours: 0, overtimePay: 0,
-      federalWH:    Number(seed.federal || 0),
-      stateWH:      Number(seed.state || 0),
-      socSec:       Number(seed.socialsecurity || 0),
-      medicare:     Number(seed.medicare || 0),
-      pretax:       Number(seed.pretax || 0),
-      posttax:      Number(seed.posttax || 0),
-      grossPay:     Number(seed.gross || 0),
-      netPay:       0
+      // Per-row (does NOT include seed — seed hours/gross go into the totals only)
+      regularHours:  0,
+      regularPay:    0,
+      overtimeHours: 0,
+      overtimePay:   0,
+
+      // Totals (include seed)
+      totalHoursExtra: seedHours,   // seed hours that don't belong to a row
+      grossPayExtra:   seedGross,   // seed gross that doesn't belong to a row
+
+      federalWH: seedFederal,
+      stateWH:   seedState,
+      socSec:    seedSocSec,
+      medicare:  seedMedicare,
+      pretax:    seedPretax,
+      posttax:   seedPosttax,
+      netPay:    seedNet
     };
-    // Seed net pay can't be derived, so store implicit: seed grossly covers aggregate, net for seed = gross - all deductions
-    acc.netPay = Math.max(0, acc.grossPay - (acc.federalWH + acc.stateWH + acc.socSec + acc.medicare + acc.pretax + acc.posttax));
 
     stubs.forEach(function (s) {
       if (s.companyId !== companyId) return;
       if (s.employeeId !== employeeId) return;
       if (yearFromInputDate(s.payDate) !== year) return;
+      if (excludePayDate && s.payDate === excludePayDate) return;
       acc.regularHours  += num(s.regularHours);
       acc.regularPay    += num(s.regularPay);
       acc.overtimeHours += num(s.overtimeHours);
@@ -699,7 +745,6 @@
       acc.medicare      += num(s.medicare);
       acc.pretax        += num(s.pretax);
       acc.posttax       += num(s.posttax);
-      acc.grossPay      += num(s.grossPay);
       acc.netPay        += num(s.netPay);
     });
     return acc;
@@ -733,15 +778,23 @@
       var ssExempt  = valueOf("isSocialSecurityExempt") === "yes";
       var mcExempt  = valueOf("isMedicareExempt")       === "yes";
 
+      var payDate = valueOf("payDate");
+      if (!payDate) { flashButton("saveStubBtn", "Pay date required", true); return; }
+
+      // Apply SS wage-base cap when persisting (same rule as generateStub).
+      var year              = yearFromInputDate(payDate) || (new Date()).getFullYear();
+      var rollForCap        = rollupYtd(activeCompanyId, employeeSelect.value, year, payDate);
+      var ssWageBase        = SS_WAGE_BASE_BY_YEAR[year] || SS_WAGE_BASE_FALLBACK;
+      var ytdSsWagesBefore  = (rollForCap.regularPay + rollForCap.overtimePay + rollForCap.grossPayExtra) - rollForCap.pretax;
+      var ssCapRemaining    = Math.max(0, ssWageBase - Math.max(0, ytdSsWagesBefore));
+      var ssTaxableThisRun  = Math.min(taxableWages, ssCapRemaining);
+
       var federalWH = fedExempt ? 0 : percentage(Math.max(0, taxableWages - fedAllow * 20), federalRate) + additionalFed;
       var stateWH   = stExempt  ? 0 : percentage(Math.max(0, taxableWages - stExemptNum * 10), stateCfg.defaultStateTaxRate);
-      var socSec    = ssExempt  ? 0 : percentage(taxableWages, SOCIAL_SECURITY_RATE);
+      var socSec    = ssExempt  ? 0 : percentage(ssTaxableThisRun, SOCIAL_SECURITY_RATE);
       var medicare  = mcExempt  ? 0 : percentage(taxableWages, MEDICARE_RATE);
       var totalDed  = federalWH + stateWH + socSec + medicare + pretax + posttax;
       var netPay    = Math.max(0, grossPay - totalDed);
-
-      var payDate = valueOf("payDate");
-      if (!payDate) { flashButton("saveStubBtn", "Pay date required", true); return; }
 
       // Idempotent: same company+employee+payDate replaces prior record.
       var existingIdx = stubs.findIndex(function (s) {
