@@ -1,26 +1,213 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- TODO: Set the document title to the name of your application -->
-    <title>Lovable App</title>
-    <meta name="description" content="Lovable Generated Project" />
-    <meta name="author" content="Lovable" />
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paystub Generator</title>
+  <meta name="description" content="Generate, calculate, and print payroll stubs with company and employee presets.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="panel controls">
+      <h1>Paystub Generator</h1>
+      <p class="intro">Save company profiles, pick employee exemptions, enter hours, and generate printable stubs.</p>
 
-    <!-- TODO: Update og:title to match your application name -->
-    <meta property="og:title" content="Lovable App" />
-    <meta property="og:description" content="Lovable Generated Project" />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+      <form id="paystub-form">
+        <fieldset>
+          <legend>Company profile</legend>
+          <div class="grid two-col">
+            <label>Saved company
+              <select id="companySelect"></select>
+            </label>
+            <label>Company name
+              <input id="companyName" type="text" required>
+            </label>
+            <label>Address line 1
+              <input id="companyAddress1" type="text" required>
+            </label>
+            <label>Address line 2
+              <input id="companyAddress2" type="text" placeholder="Suite, city, state ZIP">
+            </label>
+            <label>EIN / Tax ID
+              <input id="companyEin" type="text" required>
+            </label>
+            <label>State
+              <select id="state" required>
+                <option value="IL">Illinois</option>
+                <option value="TX">Texas</option>
+              </select>
+            </label>
+          </div>
+          <div class="actions">
+            <button type="button" id="saveCompanyBtn">Save / Update Company</button>
+            <button type="button" id="newCompanyBtn" class="ghost">New Company</button>
+          </div>
+        </fieldset>
 
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@Lovable" />
-    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-  </head>
+        <fieldset>
+          <legend>Employee and payroll input</legend>
+          <div class="grid two-col">
+            <label>Saved employee
+              <select id="employeeSelect"></select>
+            </label>
+            <label>Employee name
+              <input id="employeeName" type="text" required>
+            </label>
+            <label>Employee ID
+              <input id="employeeId" type="text" required>
+            </label>
+            <label>Pay date
+              <input id="payDate" type="date" required>
+            </label>
+            <label>Pay period start
+              <input id="periodStart" type="date" required>
+            </label>
+            <label>Pay period end
+              <input id="periodEnd" type="date" required>
+            </label>
+            <label>Hourly rate ($)
+              <input id="hourlyRate" type="number" min="0" step="0.01" required>
+            </label>
+            <label>Regular hours
+              <input id="regularHours" type="number" min="0" step="0.01" required>
+            </label>
+            <label>Overtime hours
+              <input id="overtimeHours" type="number" min="0" step="0.01" value="0">
+            </label>
+            <label>Overtime multiplier
+              <input id="otMultiplier" type="number" min="1" step="0.01" value="1.5">
+            </label>
+          </div>
 
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+          <div class="grid two-col tax-grid">
+            <label>Federal filing status
+              <select id="federalFilingStatus">
+                <option value="single">Single</option>
+                <option value="married">Married</option>
+                <option value="head">Head of household</option>
+              </select>
+            </label>
+            <label>Federal allowances/dependents
+              <input id="federalAllowances" type="number" min="0" step="1" value="0">
+            </label>
+            <label>Additional federal withholding ($)
+              <input id="additionalFederal" type="number" min="0" step="0.01" value="0">
+            </label>
+            <label>State withholding exemptions
+              <input id="stateExemptions" type="number" min="0" step="1" value="0">
+            </label>
+            <label>Is employee exempt from federal withholding?
+              <select id="isFederalExempt">
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </label>
+            <label>Is employee exempt from state withholding?
+              <select id="isStateExempt">
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </label>
+            <label>Is employee exempt from Social Security?
+              <select id="isSocialSecurityExempt">
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </label>
+            <label>Is employee exempt from Medicare?
+              <select id="isMedicareExempt">
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </label>
+            <label>Pre-tax deductions ($)
+              <input id="pretaxDeductions" type="number" min="0" step="0.01" value="0">
+            </label>
+            <label>Post-tax deductions ($)
+              <input id="postTaxDeductions" type="number" min="0" step="0.01" value="0">
+            </label>
+            <label>State income tax override (%) 
+              <input id="stateTaxRateOverride" type="number" min="0" step="0.01" placeholder="Use default if blank">
+            </label>
+            <label>Federal withholding base rate (%) 
+              <input id="federalTaxRate" type="number" min="0" step="0.01" value="12">
+            </label>
+          </div>
+
+          <div class="actions">
+            <button type="button" id="saveEmployeeBtn">Save / Update Employee</button>
+            <button type="button" id="newEmployeeBtn" class="ghost">New Employee</button>
+            <button type="submit" class="primary">Generate Stub</button>
+            <button type="button" id="printStubBtn">Print Stub</button>
+          </div>
+        </fieldset>
+      </form>
+    </section>
+
+    <section class="panel preview" id="stub-root">
+      <article class="stub-paper" id="stubPaper">
+        <header class="stub-header">
+          <div>
+            <p class="stub-company" id="stubCompanyName">Company Name</p>
+            <p id="stubCompanyAddress1">Address line 1</p>
+            <p id="stubCompanyAddress2">Address line 2</p>
+            <p id="stubEin">EIN</p>
+          </div>
+          <div class="stub-meta">
+            <p><strong>Pay Date:</strong> <span id="stubPayDate">--</span></p>
+            <p><strong>Pay Period:</strong> <span id="stubPayPeriod">--</span></p>
+            <p><strong>State:</strong> <span id="stubState">--</span></p>
+            <p class="stub-mark">NON-NEGOTIABLE</p>
+          </div>
+        </header>
+
+        <section class="stub-grid">
+          <div class="stub-box">
+            <h2>Personal & Check Information</h2>
+            <p><strong>Employee:</strong> <span id="stubEmployeeName">--</span></p>
+            <p><strong>Employee ID:</strong> <span id="stubEmployeeId">--</span></p>
+            <p><strong>Filing Status:</strong> <span id="stubFilingStatus">--</span></p>
+            <p><strong>Federal Allowances:</strong> <span id="stubFederalAllowances">0</span></p>
+            <p><strong>State Exemptions:</strong> <span id="stubStateExemptions">0</span></p>
+            <p><strong>Federal Exempt:</strong> <span id="stubFederalExempt">No</span></p>
+            <p><strong>State Exempt:</strong> <span id="stubStateExempt">No</span></p>
+          </div>
+
+          <div class="stub-box">
+            <h2>Earnings & Deductions</h2>
+            <table class="stub-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>Hours</th>
+                  <th>Rate</th>
+                  <th>Current</th>
+                </tr>
+              </thead>
+              <tbody id="earningsRows"></tbody>
+            </table>
+            <table class="stub-table deductions">
+              <thead>
+                <tr>
+                  <th>Withholding</th>
+                  <th>Current</th>
+                </tr>
+              </thead>
+              <tbody id="deductionRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer class="stub-footer">
+          <p><strong>Gross Pay:</strong> <span id="stubGrossPay">$0.00</span></p>
+          <p><strong>Total Deductions:</strong> <span id="stubTotalDeductions">$0.00</span></p>
+          <p><strong>Net Pay:</strong> <span id="stubNetPay">$0.00</span></p>
+        </footer>
+      </article>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
 </html>

@@ -1,0 +1,289 @@
+:root {
+  --bg: #f3f4f7;
+  --panel: #ffffff;
+  --line: #d6d8de;
+  --text: #1f2329;
+  --muted: #5e6572;
+  --accent: #1e5bd7;
+  --accent-dark: #0f46b4;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(360px, 520px) 1fr;
+  gap: 1.2rem;
+  padding: 1rem;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(18, 22, 31, 0.06);
+}
+
+.controls {
+  padding: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+
+.intro {
+  color: var(--muted);
+  margin-top: 0.4rem;
+  margin-bottom: 1rem;
+  font-size: 0.92rem;
+}
+
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+legend {
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0 0.4rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #c6cad4;
+  border-radius: 6px;
+  color: var(--text);
+  background: #fff;
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid rgba(30, 91, 215, 0.2);
+  border-color: var(--accent);
+}
+
+.grid {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.two-col {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.tax-grid {
+  margin-top: 0.9rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.52rem 0.78rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button.primary,
+button[type="submit"] {
+  background: var(--accent);
+  color: #fff;
+}
+
+button.primary:hover,
+button[type="submit"]:hover {
+  background: var(--accent-dark);
+}
+
+button.ghost {
+  border-color: #b9bfca;
+  background: #fff;
+  color: #263246;
+}
+
+.preview {
+  padding: 0.75rem;
+  overflow: auto;
+}
+
+.stub-paper {
+  width: 8.5in;
+  min-height: 11in;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid #bbbfc8;
+  padding: 0.5in;
+  color: #1b1d21;
+}
+
+.stub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  border-bottom: 1px solid #aeb4c0;
+  padding-bottom: 0.35in;
+}
+
+.stub-company {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.stub-header p {
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.stub-meta {
+  text-align: right;
+}
+
+.stub-mark {
+  margin-top: 0.22in;
+  color: #7f8693;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.stub-grid {
+  display: grid;
+  grid-template-columns: 0.95fr 1.45fr;
+  gap: 0.18in;
+  margin-top: 0.28in;
+}
+
+.stub-box {
+  border: 1px solid #aeb4c0;
+  padding: 0.11in;
+}
+
+.stub-box h2 {
+  font-size: 0.73rem;
+  margin-bottom: 0.12in;
+  text-transform: uppercase;
+  border-bottom: 1px solid #d0d4dc;
+  padding-bottom: 0.06in;
+}
+
+.stub-box p {
+  font-size: 0.72rem;
+  line-height: 1.28;
+  margin: 0 0 0.04in;
+}
+
+.stub-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.08in;
+}
+
+.stub-table th,
+.stub-table td {
+  border: 1px solid #d0d4dc;
+  font-size: 0.69rem;
+  padding: 0.04in 0.05in;
+  text-align: right;
+}
+
+.stub-table th:first-child,
+.stub-table td:first-child {
+  text-align: left;
+}
+
+.stub-footer {
+  margin-top: 0.28in;
+  border-top: 1px solid #aeb4c0;
+  padding-top: 0.12in;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.28in;
+}
+
+.stub-footer p {
+  font-size: 0.8rem;
+}
+
+@media (max-width: 1200px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .controls {
+    max-height: none;
+  }
+
+  .stub-paper {
+    width: 100%;
+    min-height: auto;
+  }
+
+  .stub-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .controls {
+    display: none;
+  }
+
+  .panel.preview {
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .stub-paper {
+    border: 0;
+    margin: 0;
+    width: auto;
+    min-height: auto;
+    padding: 0.25in;
+  }
+}

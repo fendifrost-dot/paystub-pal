@@ -1,29 +1,41 @@
-# Paystub Generator
+# Paystub Generator (Static Web App)
 
-A single-page payroll stub generator for saving reusable company and employee profiles, entering payroll run details, calculating withholdings, and printing a classic letter-size check-stub layout.
+Client-side paystub generator with saved company/employee profiles and a printable stub layout.
 
-## Usage
+## Stack
 
-1. Open the app in a browser.
-2. Enter a company profile and click **Save/Update Company**.
-3. Enter an employee profile and click **Save/Update Employee**.
-4. Fill out payroll run fields such as pay date, pay period, hourly rate, hours, deductions, and withholding rates.
-5. Click **Generate Stub** to refresh the preview.
-6. Click **Print Stub** to print or save as PDF from the browser print dialog.
+- Vanilla HTML, CSS, and JavaScript (no build step)
+- Browser `localStorage` persistence for saved companies and employees
 
-Saved company and employee profiles are stored in the browser with `localStorage`, so they stay available on the same device/browser without a backend.
+## Features
 
-## Tax calculation notes
+- Save and reuse company records (name, address, EIN, state)
+- Save and reuse employee withholding/exemption defaults
+- Enter regular and overtime hours, hourly rate, and overtime multiplier
+- Automatic gross pay, deductions, and net pay calculations
+- State-aware defaults for:
+  - **Illinois** (default state income tax rate 4.95%)
+  - **Texas** (default state income tax rate 0.00%)
+- Adjustable tax inputs:
+  - Federal withholding base rate
+  - State withholding override rate
+  - Additional federal withholding amount
+- Exemption options:
+  - Federal withholding exempt
+  - State withholding exempt
+  - Social Security exempt
+  - Medicare exempt
+- Printable paystub output from the built-in preview pane
 
-Implemented defaults:
+## How to Use
 
-- Illinois state withholding: 4.95%
-- Texas state withholding: 0.00%
-- Social Security: 6.2%
-- Medicare: 1.45%
-- Optional state override rate replaces the default state rate
-- Federal withholding uses the adjustable base rate plus additional federal withholding unless federally exempt
+1. Open `index.html` in your browser.
+2. Fill in company and employee/payroll inputs.
+3. Click **Save / Update Company** and **Save / Update Employee** to reuse profiles later.
+4. Click **Generate Stub** to refresh calculations and preview.
+5. Click **Print Stub** for a print-ready paystub.
 
-## Disclaimer
+## Notes
 
-This app is for estimation, formatting, and recordkeeping support only. It is not tax, payroll, legal, or accounting advice. Payroll rules can vary by jurisdiction, employee status, benefits, pay frequency, and current law. Verify all withholdings and paystub requirements with a qualified payroll professional or official agency guidance before issuing payroll.
+- This tool is intended for internal draft paystub generation and planning workflows.
+- Tax logic is simplified and configurable; verify rates and compliance details with your payroll/tax advisor before production payroll processing.
