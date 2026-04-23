@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Building2, Calculator, FileText, Printer, RotateCcw, Save, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -360,7 +360,7 @@ const Metric = ({ label, value, strong = false }: { label: string; value: string
   </div>
 );
 
-const Panel = ({ icon, title, action, children }: { icon: React.ReactNode; title: string; action?: React.ReactNode; children: React.ReactNode }) => (
+const Panel = ({ icon, title, action, children }: { icon: ReactNode; title: string; action?: ReactNode; children: ReactNode }) => (
   <section className="rounded-lg border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-glass">
     <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <h2 className="flex items-center gap-2 text-lg font-semibold text-card-foreground"><span className="text-accent">{icon}</span>{title}</h2>
@@ -370,7 +370,7 @@ const Panel = ({ icon, title, action, children }: { icon: React.ReactNode; title
   </section>
 );
 
-const Field = ({ label, children, error }: { label: string; children: React.ReactNode; error?: React.ReactNode }) => (
+const Field = ({ label, children, error }: { label: string; children: ReactNode; error?: ReactNode }) => (
   <div>
     <Label className="mb-2 block text-sm font-semibold text-foreground">{label}</Label>
     {children}
