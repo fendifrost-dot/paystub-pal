@@ -530,10 +530,10 @@
     var stTaxable  = Math.max(0, taxableWages - stateAdj);
     var stateWH    = stExempt ? 0 : percentage(stTaxable, stateCfg.defaultStateTaxRate);
 
-    // Social Security with wage-base cap
-    // YTD taxable wages for SS before this period = prior gross - prior pretax (from the rollup).
+    // Social Security with wage-base cap.
+    // YTD taxable wages for SS before this period = prior gross - prior pretax.
     var ssWageBase        = SS_WAGE_BASE_BY_YEAR[year] || SS_WAGE_BASE_FALLBACK;
-    var ytdSsWagesBefore  = (roll.regularPay + roll.overtimePay + roll.grossPayExtra) - roll.pretax;
+    var ytdSsWagesBefore  = (roll.regularPay + roll.overtimePay) - roll.pretax;
     var ssCapRemaining    = Math.max(0, ssWageBase - Math.max(0, ytdSsWagesBefore));
     var ssTaxableThisRun  = Math.min(taxableWages, ssCapRemaining);
     var socSec            = ssExempt ? 0 : percentage(ssTaxableThisRun, SOCIAL_SECURITY_RATE);
@@ -544,8 +544,7 @@
     var netPay   = Math.max(0, grossPay - totalDed);
     var totalHrs = regularHours + overtimeHours;
 
-    // -- YTD (rollup + this period). Rollup already excludes any saved stub for
-    //    the current payDate, so no double-count even after Save. --
+    // YTD = rollup (seed + prior saved stubs, excluding current payDate) + this period.
     var ytd = {
       regularHours:  roll.regularHours  + regularHours,
       regularPay:    roll.regularPay    + regularPay,
@@ -559,8 +558,8 @@
       posttax:       roll.posttax       + posttax,
       netPay:        roll.netPay        + netPay
     };
-    ytd.totalHours = ytd.regularHours + ytd.overtimeHours + roll.totalHoursExtra;
-    ytd.grossPay   = ytd.regularPay + ytd.overtimePay + roll.grossPayExtra;
+    ytd.totalHours = ytd.regularHours + ytd.overtimeHours;
+    ytd.grossPay   = ytd.regularPay + ytd.overtimePay;
     ytd.totalDed   = ytd.federalWH + ytd.stateWH + ytd.socSec + ytd.medicare + ytd.pretax + ytd.posttax;
 
     // Earnings rows
@@ -693,10 +692,12 @@
     var emp = employees.find(function (e) { return e.id === employeeId; });
     var seed = (emp && emp.seedYtd) ? emp.seedYtd : {};
 
-    // Seed contributes to TOTALS only (grossPay, totalHours via per-row aggregate,
-    // each withholding, netPay). It does NOT back-fill per-row regular/OT breakdown
-    // because we can't reliably split prior-employer history into regular vs OT.
-    // Per-row YTD (Hourly / Overtime) reflects only this year's saved stubs.
+    // Seed represents prior YTD carried forward (typically a mid-year hire's
+    // previous-employer totals). We roll it into the "Hourly" row because:
+    //   1. That's where users visually expect it to land.
+    //   2. The seed UI only captures totals (hours + gross), not a regular/OT split.
+    // Users with prior OT history get a minor misattribution on the per-row
+    // breakdown, but the total hours and total gross are always correct.
     var seedHours       = Number(seed.hours           || 0);
     var seedGross       = Number(seed.gross           || 0);
     var seedFederal     = Number(seed.federal         || 0);
@@ -711,15 +712,10 @@
       : Math.max(0, seedGross - (seedFederal + seedState + seedSocSec + seedMedicare + seedPretax + seedPosttax));
 
     var acc = {
-      // Per-row (does NOT include seed — seed hours/gross go into the totals only)
-      regularHours:  0,
-      regularPay:    0,
+      regularHours:  seedHours,
+      regularPay:    seedGross,
       overtimeHours: 0,
       overtimePay:   0,
-
-      // Totals (include seed)
-      totalHoursExtra: seedHours,   // seed hours that don't belong to a row
-      grossPayExtra:   seedGross,   // seed gross that doesn't belong to a row
 
       federalWH: seedFederal,
       stateWH:   seedState,
@@ -785,7 +781,7 @@
       var year              = yearFromInputDate(payDate) || (new Date()).getFullYear();
       var rollForCap        = rollupYtd(activeCompanyId, employeeSelect.value, year, payDate);
       var ssWageBase        = SS_WAGE_BASE_BY_YEAR[year] || SS_WAGE_BASE_FALLBACK;
-      var ytdSsWagesBefore  = (rollForCap.regularPay + rollForCap.overtimePay + rollForCap.grossPayExtra) - rollForCap.pretax;
+      var ytdSsWagesBefore  = (rollForCap.regularPay + rollForCap.overtimePay) - rollForCap.pretax;
       var ssCapRemaining    = Math.max(0, ssWageBase - Math.max(0, ytdSsWagesBefore));
       var ssTaxableThisRun  = Math.min(taxableWages, ssCapRemaining);
 
