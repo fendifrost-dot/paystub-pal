@@ -447,7 +447,23 @@ details.seed-ytd .grid {
   box-shadow: none !important;
   border: none !important;
   border-radius: 0 !important;
+  /* Shrink to content so the stub exports as a single page (the 11in
+     min-height otherwise spills a near-empty second page in the PDF). */
+  min-height: 0 !important;
+  height: auto !important;
+  /* Let right-aligned YTD values render fully; with overflow:hidden the
+     html2canvas capture trims the last character at the clipped edge. */
+  overflow: visible !important;
 }
+
+/* Keep the right-aligned YTD figures off the page edge during PDF export so
+   the rasterizer doesn't crop the last character (earnings/withholdings YTD
+   column and the NET PAY YTD value). Only active while exporting. */
+.stub-paper.pdf-rendering .stub-right { padding-right: 12px; }
+.stub-paper.pdf-rendering .data-table th.num,
+.stub-paper.pdf-rendering .data-table td.num { padding-right: 5px; }
+.stub-paper.pdf-rendering .stub-netpay { box-sizing: border-box; padding-right: 20px; }
+.stub-paper.pdf-rendering .stub-netpay .np-val { padding-right: 6px; }
 
 .stub-paper p { margin: 0; padding: 0; }
 

@@ -260,6 +260,7 @@
     var c = getActiveCompany();
     if (c) applyCompany(c); else clearCompanyFields();
     hydrateEmployeeSelect();  // employee list depends on active company
+    resetStubEarnings(getActiveEmployee());  // don't carry prior company's pay
     updateContext();
     refreshCompanyButtons();
     generateStub();
@@ -305,6 +306,7 @@
     saveString(STORAGE_KEYS.activeCompanyId, "");
     clearCompanyFields();
     hydrateEmployeeSelect();
+    resetStubEarnings(null);  // blank slate for a brand-new company
     refreshCompanyButtons();
     updateContext();
     generateStub();
@@ -387,6 +389,7 @@
   function onEmployeeChange() {
     var emp = getActiveEmployee();
     if (emp) applyEmployee(emp); else clearEmployeeFields();
+    resetStubEarnings(emp);  // start the new person's stub clean
     refreshEmployeeButtons();
     renderStubHistory();
     updateContext();
@@ -444,6 +447,7 @@
     if (!activeCompanyId) return;
     employeeSelect.value = "";
     clearEmployeeFields();
+    resetStubEarnings(null);  // blank slate for a brand-new employee
     refreshEmployeeButtons();
     updateContext();
     generateStub();
@@ -531,6 +535,39 @@
       if (!el) return;
       el.value = (seed && seed[key] != null) ? String(seed[key]) : "";
     });
+  }
+
+  // ===========================================================================
+  // Per-period earnings isolation
+  // ---------------------------------------------------------------------------
+  // The earnings inputs (rate, hours, OT, deductions) live on the stub form,
+  // not the employee record. Without an explicit reset they persist across a
+  // company/employee switch — silently carrying one person's pay into the next
+  // person's first stub. resetStubEarnings() clears the per-period amounts on
+  // every context switch; for a returning employee it pre-fills the recurring
+  // fields from their most recent saved stub so continuity is kept without
+  // cross-contamination.
+  // ===========================================================================
+  function latestStubFor(companyId, employeeId) {
+    if (!companyId || !employeeId) return null;
+    return stubs
+      .filter(function (s) { return s.companyId === companyId && s.employeeId === employeeId; })
+      .sort(function (a, b) { return String(b.payDate).localeCompare(String(a.payDate)); })[0] || null;
+  }
+
+  function setVal(id, v) {
+    var el = document.getElementById(id);
+    if (el) el.value = v;
+  }
+
+  function resetStubEarnings(emp) {
+    var latest = emp ? latestStubFor(emp.companyId, emp.id) : null;
+    setVal("regularHours", "");
+    setVal("overtimeHours", "");
+    setVal("hourlyRate",        latest ? String(latest.hourlyRate || "") : "");
+    setVal("otMultiplier",      latest ? String(latest.otMultiplier || 1.5) : "1.5");
+    setVal("pretaxDeductions",  latest ? String(latest.pretax || 0) : "0");
+    setVal("postTaxDeductions", latest ? String(latest.posttax || 0) : "0");
   }
 
   // ===========================================================================
@@ -1023,11 +1060,15 @@
       var filename = "paystub-" + safeName + "-" + model.payDate + ".pdf";
 
       var opt = {
-        margin:      [0.25, 0.25, 0.25, 0.25],
+        margin:      [0.3, 0.3, 0.3, 0.3],
         filename:    filename,
         image:       { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
-        jsPDF:       { unit: "in", format: "letter", orientation: "portrait" }
+        // scale 3 renders text noticeably sharper (the PDF embeds a raster
+        // snapshot of the stub; higher scale = less "scanned" softness).
+        html2canvas: { scale: 3, useCORS: true, backgroundColor: "#ffffff" },
+        jsPDF:       { unit: "in", format: "letter", orientation: "portrait" },
+        // Keep the (now content-height) stub on a single page.
+        pagebreak:   { mode: ["avoid-all"] }
       };
 
       flashButton("generatePdfBtn", "Rendering\u2026", false);
